@@ -9,10 +9,10 @@ export const protect = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, config.JWT_SECRET);
+    const decoded = jwt.verify(token, config.ACCESS_TOKEN_SECRET);
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };

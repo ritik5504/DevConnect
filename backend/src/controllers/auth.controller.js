@@ -3,12 +3,19 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 
+
 /**
  * Generate JWT Token
  */
-const generateToken = (id) => {
-  return jwt.sign({ id }, config.JWT_SECRET, {
-    expiresIn: "1d",
+const generateAccessToken = (id) => {
+  return jwt.sign({ id }, config.ACCESS_TOKEN_SECRET, {
+    expiresIn: "15m",
+  });
+};
+
+const generateRefreshToken = (id) => {
+  return jwt.sign({ id }, config.REFRESH_TOKEN_SECRET, {
+    expiresIn: "7d",
   });
 };
 
@@ -42,17 +49,22 @@ export const register = async (req, res) => {
     });
 
     // generate token
-    const token = generateToken(user._id);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(201).json({
-      message: "User registered successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
-      token,
-    });
+    message: "User registered successfully",
+    user: {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+    },
+    accessToken,
+    refreshToken,
+  });
   } catch (error) {
     res.status(500).json({
       message: error.message,
@@ -85,9 +97,15 @@ export const login = async (req, res) => {
         message: "Invalid email or password",
       });
     }
+    
 
     // generate token
-    const token = generateToken(user._id);
+   const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // store refresh token in DB
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(200).json({
       message: "Login successful",
@@ -96,7 +114,8 @@ export const login = async (req, res) => {
         username: user.username,
         email: user.email,
       },
-      token,
+      accessToken,
+      refreshToken,
     });
   } catch (error) {
     res.status(500).json({
@@ -130,5 +149,33 @@ export const getMe = async (req, res) => {
     res.status(500).json({
       message: error.message,
     });
+  }
+};
+export const refreshAccessToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: "No refresh token" });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      refreshToken,
+      config.REFRESH_TOKEN_SECRET
+    );
+
+    const user = await userModel.findById(decoded.id);
+
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+
+    const newAccessToken = generateAccessToken(user._id);
+
+    res.json({
+      accessToken: newAccessToken,
+    });
+  } catch (error) {
+    res.status(403).json({ message: "Refresh token expired" });
   }
 };
