@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import config from "./config.js";
 
 
-const connctdb = async () => {
+const connectDB = async () => {
     
     try{
         await mongoose.connect(config.MONGO_URI);
@@ -12,5 +12,4 @@ const connctdb = async () => {
     }
 };
 
-export default connctdb;
-
+export default connectDB;
