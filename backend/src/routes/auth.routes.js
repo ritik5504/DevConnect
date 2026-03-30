@@ -32,4 +32,8 @@ authRouter.post("/logout", authController.logout);
 
 authRouter.post("/logout-all", protect, authController.logoutAll);
 
+authRouter.post("/verify-otp", authController.verifyOTP);
+
+
+
 export default authRouter;

@@ -3,6 +3,12 @@ import Session from "../models/session.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
+import { sendEmail } from "../utils/sendMail.js";
+
+/**
+ * TEMP OTP STORE (in-memory)
+ */
+const otpStore = new Map();
 
 /**
  * Generate Tokens
@@ -20,50 +26,49 @@ const generateRefreshToken = (id) => {
 };
 
 /**
- * REGISTER USER
+ * Generate OTP
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * REGISTER (SEND OTP ONLY - NO DB SAVE)
  */
 export const register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    const existingUser = await userModel.findOne({
-      $or: [{ username }, { email }],
-    });
-
+    // ❌ if already exists
+    const existingUser = await userModel.findOne({ email });
     if (existingUser) {
       return res.status(409).json({
-        message: "Username or email already exists",
+        message: "User already exists, please login",
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const otp = generateOTP();
 
-    const user = await userModel.create({
+    // store temporarily
+    otpStore.set(email, {
       username,
       email,
-      password: hashedPassword,
+      password,
+      otp,
+      expiry: Date.now() + 5 * 60 * 1000, // 5 min
     });
 
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    // send email
+    await sendEmail(
+      email,
+      "OTP Verification",
+      `Your OTP is ${otp}`
+    );
 
-    // ✅ create session
-    await Session.create({
-      userId: user._id,
-      refreshToken,
-      userAgent: req.headers["user-agent"],
-      ip: req.ip,
-    });
+    console.log("OTP SENT:", otp); // debug
 
-    res.status(201).json({
-      message: "User registered successfully",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
-      accessToken,
-      refreshToken,
+    res.json({
+      message: "OTP sent to your email",
     });
   } catch (error) {
     res.status(500).json({
@@ -73,7 +78,70 @@ export const register = async (req, res) => {
 };
 
 /**
- * LOGIN USER
+ * VERIFY OTP → CREATE USER
+ */
+export const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const data = otpStore.get(email);
+
+    if (!data) {
+      return res.status(400).json({
+        message: "No OTP found, please register again",
+      });
+    }
+
+    const cleanOtp = otp.toString().trim();
+
+    console.log("Expected OTP:", data.otp);
+    console.log("Entered OTP:", cleanOtp);
+
+    // ❌ expired
+    if (data.expiry < Date.now()) {
+      otpStore.delete(email);
+      return res.status(400).json({
+        message: "OTP expired, register again",
+      });
+    }
+
+    // ❌ invalid
+    if (data.otp !== cleanOtp) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
+
+    // ✅ create user now
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    const user = await userModel.create({
+      username: data.username,
+      email: data.email,
+      password: hashedPassword,
+      isVerified: true,
+    });
+
+    // remove temp data
+    otpStore.delete(email);
+
+    res.json({
+      message: "Account created successfully",
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * LOGIN
  */
 export const login = async (req, res) => {
   try {
@@ -98,7 +166,7 @@ export const login = async (req, res) => {
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    // ✅ store in session (IMPORTANT)
+    // create session
     await Session.create({
       userId: user._id,
       refreshToken,
@@ -106,13 +174,8 @@ export const login = async (req, res) => {
       ip: req.ip,
     });
 
-    res.status(200).json({
+    res.json({
       message: "Login successful",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
       accessToken,
       refreshToken,
     });
@@ -138,8 +201,7 @@ export const getMe = async (req, res) => {
       });
     }
 
-    res.status(200).json({
-      message: "User fetched successfully",
+    res.json({
       user,
     });
   } catch (error) {
@@ -150,13 +212,15 @@ export const getMe = async (req, res) => {
 };
 
 /**
- * REFRESH ACCESS TOKEN
+ * REFRESH TOKEN
  */
 export const refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
-    return res.status(401).json({ message: "No refresh token" });
+    return res.status(401).json({
+      message: "No refresh token",
+    });
   }
 
   try {
@@ -171,16 +235,20 @@ export const refreshAccessToken = async (req, res) => {
     });
 
     if (!session) {
-      return res.status(403).json({ message: "Invalid session" });
+      return res.status(403).json({
+        message: "Invalid session",
+      });
     }
 
-    const newAccessToken = generateAccessToken(decoded.id);
+    const accessToken = generateAccessToken(decoded.id);
 
     res.json({
-      accessToken: newAccessToken,
+      accessToken,
     });
   } catch (error) {
-    res.status(403).json({ message: "Invalid refresh token" });
+    res.status(403).json({
+      message: "Invalid refresh token",
+    });
   }
 };
 
