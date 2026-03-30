@@ -1,11 +1,11 @@
 import userModel from "../models/user.model.js";
+import Session from "../models/session.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 
-
 /**
- * Generate JWT Token
+ * Generate Tokens
  */
 const generateAccessToken = (id) => {
   return jwt.sign({ id }, config.ACCESS_TOKEN_SECRET, {
@@ -21,13 +21,11 @@ const generateRefreshToken = (id) => {
 
 /**
  * REGISTER USER
- * POST /api/auth/register
  */
 export const register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // check if user exists
     const existingUser = await userModel.findOne({
       $or: [{ username }, { email }],
     });
@@ -38,33 +36,35 @@ export const register = async (req, res) => {
       });
     }
 
-    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // create user
     const user = await userModel.create({
       username,
       email,
       password: hashedPassword,
     });
 
-    // generate token
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    user.refreshToken = refreshToken;
-    await user.save();
+    // ✅ create session
+    await Session.create({
+      userId: user._id,
+      refreshToken,
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+    });
 
     res.status(201).json({
-    message: "User registered successfully",
-    user: {
-      id: user._id,
-      username: user.username,
-      email: user.email,
-    },
-    accessToken,
-    refreshToken,
-  });
+      message: "User registered successfully",
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+      },
+      accessToken,
+      refreshToken,
+    });
   } catch (error) {
     res.status(500).json({
       message: error.message,
@@ -74,13 +74,11 @@ export const register = async (req, res) => {
 
 /**
  * LOGIN USER
- * POST /api/auth/login
  */
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check user
     const user = await userModel.findOne({ email });
 
     if (!user) {
@@ -89,7 +87,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // compare password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -97,15 +94,17 @@ export const login = async (req, res) => {
         message: "Invalid email or password",
       });
     }
-    
 
-    // generate token
-   const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    // store refresh token in DB
-    user.refreshToken = refreshToken;
-    await user.save();
+    // ✅ store in session (IMPORTANT)
+    await Session.create({
+      userId: user._id,
+      refreshToken,
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+    });
 
     res.status(200).json({
       message: "Login successful",
@@ -126,8 +125,6 @@ export const login = async (req, res) => {
 
 /**
  * GET CURRENT USER
- * GET /api/auth/me
- * (Protected Route)
  */
 export const getMe = async (req, res) => {
   try {
@@ -151,6 +148,10 @@ export const getMe = async (req, res) => {
     });
   }
 };
+
+/**
+ * REFRESH ACCESS TOKEN
+ */
 export const refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
@@ -164,18 +165,51 @@ export const refreshAccessToken = async (req, res) => {
       config.REFRESH_TOKEN_SECRET
     );
 
-    const user = await userModel.findById(decoded.id);
+    const session = await Session.findOne({
+      userId: decoded.id,
+      refreshToken,
+    });
 
-    if (!user || user.refreshToken !== refreshToken) {
-      return res.status(403).json({ message: "Invalid refresh token" });
+    if (!session) {
+      return res.status(403).json({ message: "Invalid session" });
     }
 
-    const newAccessToken = generateAccessToken(user._id);
+    const newAccessToken = generateAccessToken(decoded.id);
 
     res.json({
       accessToken: newAccessToken,
     });
   } catch (error) {
-    res.status(403).json({ message: "Refresh token expired" });
+    res.status(403).json({ message: "Invalid refresh token" });
   }
+};
+
+/**
+ * LOGOUT (Single Device)
+ */
+export const logout = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      message: "Refresh token required",
+    });
+  }
+
+  await Session.deleteOne({ refreshToken });
+
+  res.json({
+    message: "Logged out from this device",
+  });
+};
+
+/**
+ * LOGOUT ALL DEVICES
+ */
+export const logoutAll = async (req, res) => {
+  await Session.deleteMany({ userId: req.user.id });
+
+  res.json({
+    message: "Logged out from all devices",
+  });
 };
