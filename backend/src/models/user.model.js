@@ -22,6 +22,19 @@ const userSchema = new mongoose.Schema(
     refreshToken: {
       type: String,
     },
+    bio: {
+    type: String,
+    default: ""
+  },
+  skills: {
+    type: [String],
+    default: []
+  },
+  profilePic: {
+    type: String,
+    default: ""
+  },
+    
   },
   { timestamps: true }
 );
