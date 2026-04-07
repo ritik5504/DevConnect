@@ -1,4 +1,5 @@
 import Post from "../models/post.model.js";
+import User from "../models/user.model.js";
 
 // CREATE POST
 export const createPost = async (req, res) => {
@@ -21,7 +22,7 @@ export const createPost = async (req, res) => {
   }
 };
 
-// GET POSTS
+// GET ALL POSTS
 export const getPosts = async (req, res) => {
   try {
     const posts = await Post.find()
@@ -91,5 +92,23 @@ export const addComment = async (req, res) => {
   } catch (error) {
     console.error("COMMENT ERROR:", error);
     res.status(500).json({ message: "Comment failed" });
+  }
+};
+
+// FEED (FOLLOWING USERS POSTS)
+export const getFeed = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    const posts = await Post.find({
+      user: { $in: user.following },
+    })
+      .populate("user", "username")
+      .sort({ createdAt: -1 });
+
+    res.json(posts);
+  } catch (error) {
+    console.error("FEED ERROR:", error);
+    res.status(500).json({ message: "Failed to fetch feed" });
   }
 };
