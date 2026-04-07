@@ -105,3 +105,25 @@ export const unfollowUser = async (req, res) => {
     res.status(500).json({ message: "Unfollow failed" });
   }
 };
+
+export const searchUsers = async (req, res) => {
+  try {
+    const query = req.query.query;
+
+    if (!query) {
+      return res.status(400).json({ message: "Query is required" });
+    }
+
+    const users = await User.find({
+      $or: [
+        { username: { $regex: query, $options: "i" } },
+        { skills: { $regex: query, $options: "i" } }
+      ]
+    }).select("-password");
+
+    res.json(users);
+  } catch (error) {
+    console.error("SEARCH ERROR:", error);
+    res.status(500).json({ message: "Search failed" });
+  }
+};
