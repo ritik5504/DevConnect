@@ -25,9 +25,14 @@ export const createPost = async (req, res) => {
 // GET ALL POSTS
 export const getPosts = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 5;
+
     const posts = await Post.find()
       .populate("user", "username")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     res.json(posts);
   } catch (error) {
@@ -98,13 +103,18 @@ export const addComment = async (req, res) => {
 // FEED (FOLLOWING USERS POSTS)
 export const getFeed = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 5;
+
     const user = await User.findById(req.user.id);
 
     const posts = await Post.find({
       user: { $in: user.following },
     })
       .populate("user", "username")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     res.json(posts);
   } catch (error) {

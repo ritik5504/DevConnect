@@ -173,6 +173,32 @@ src/
 
 ---
 
+# 🧑‍🤝‍🧑 Phase 4: Follow System
+
+Implemented a social networking feature where users can follow/unfollow others and view a personalized feed.
+
+### 🚀 Features:
+
+* Follow / Unfollow users
+* Maintain followers & following relationships
+* Personalized feed (only shows posts from followed users)
+* Efficient querying using MongoDB `$in` operator
+
+### 📌 API Endpoints:
+
+#### Follow User
+
+PUT /api/user/follow/:id
+
+#### Unfollow User
+
+PUT /api/user/unfollow/:id
+
+#### Get Personalized Feed
+
+GET /api/post/feed
+
+
 # 💡 Author
 
 Ritik Raj
