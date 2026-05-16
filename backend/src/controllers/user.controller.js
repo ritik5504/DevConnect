@@ -10,17 +10,14 @@ export const getUserProfile = async (req, res) => {
       .select("-password");
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    res.json(user);
+    // Wrap in { user } so frontend can access res.data.user
+    res.json({ user });
   } catch (error) {
     console.error("GET PROFILE ERROR:", error);
-    res.status(500).json({
-      message: "Failed to get user profile",
-    });
+    res.status(500).json({ message: "Failed to get user profile" });
   }
 };
 
@@ -31,29 +28,28 @@ export const updateProfile = async (req, res) => {
   try {
     const { bio, skills, profilePic } = req.body;
 
-    const user = await userModel.findByIdAndUpdate(
-      req.user.id,
-      {
-        bio,
-        skills,
-        profilePic,
-      },
-      { new: true }
-    ).select("-password");
+    const user = await userModel
+      .findByIdAndUpdate(
+        req.user.id,
+        { bio, skills, profilePic },
+        { new: true }
+      )
+      .select("-password");
 
-    res.json(user);
+    res.json({ user });
   } catch (error) {
     console.error("UPDATE PROFILE ERROR:", error);
-    res.status(500).json({
-      message: "Failed to update profile",
-    });
+    res.status(500).json({ message: "Failed to update profile" });
   }
 };
 
+/**
+ * FOLLOW USER
+ */
 export const followUser = async (req, res) => {
   try {
-    const userToFollow = await User.findById(req.params.id);
-    const currentUser = await User.findById(req.user.id);
+    const userToFollow = await userModel.findById(req.params.id);
+    const currentUser = await userModel.findById(req.user.id);
 
     if (!userToFollow) {
       return res.status(404).json({ message: "User not found" });
@@ -66,7 +62,6 @@ export const followUser = async (req, res) => {
     if (!currentUser.following.includes(req.params.id)) {
       currentUser.following.push(req.params.id);
       userToFollow.followers.push(req.user.id);
-
       await currentUser.save();
       await userToFollow.save();
     }
@@ -78,11 +73,13 @@ export const followUser = async (req, res) => {
   }
 };
 
-// UNFOLLOW USER
+/**
+ * UNFOLLOW USER
+ */
 export const unfollowUser = async (req, res) => {
   try {
-    const userToUnfollow = await User.findById(req.params.id);
-    const currentUser = await User.findById(req.user.id);
+    const userToUnfollow = await userModel.findById(req.params.id);
+    const currentUser = await userModel.findById(req.user.id);
 
     if (!userToUnfollow) {
       return res.status(404).json({ message: "User not found" });
@@ -91,7 +88,6 @@ export const unfollowUser = async (req, res) => {
     currentUser.following = currentUser.following.filter(
       (id) => id.toString() !== req.params.id
     );
-
     userToUnfollow.followers = userToUnfollow.followers.filter(
       (id) => id.toString() !== req.user.id
     );
@@ -106,22 +102,25 @@ export const unfollowUser = async (req, res) => {
   }
 };
 
+/**
+ * SEARCH USERS
+ */
 export const searchUsers = async (req, res) => {
   try {
-    const query = req.query.query;
+    const query = req.query.query || "";
 
-    if (!query) {
-      return res.status(400).json({ message: "Query is required" });
-    }
+    const filter = query
+      ? {
+          $or: [
+            { username: { $regex: query, $options: "i" } },
+            { skills: { $regex: query, $options: "i" } },
+          ],
+        }
+      : {};
 
-    const users = await User.find({
-      $or: [
-        { username: { $regex: query, $options: "i" } },
-        { skills: { $regex: query, $options: "i" } }
-      ]
-    }).select("-password");
+    const users = await userModel.find(filter).select("-password").limit(20);
 
-    res.json(users);
+    res.json({ users });
   } catch (error) {
     console.error("SEARCH ERROR:", error);
     res.status(500).json({ message: "Search failed" });

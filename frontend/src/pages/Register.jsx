@@ -5,77 +5,144 @@ import toast from "react-hot-toast";
 
 const Register = () => {
   const navigate = useNavigate();
+  const [formData, setFormData] = useState({ username: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    password: "",
-  });
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    if (!formData.username || !formData.email || !formData.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    if (formData.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
     try {
+      setLoading(true);
       await API.post("/auth/register", formData);
-
-      toast.success("OTP sent to email");
       localStorage.setItem("email", formData.email);
+      toast.success("OTP sent to your email! 📧");
       navigate("/verify-otp");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Register failed");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Registration failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-xl shadow-lg w-96"
-      >
-        <h2 className="text-2xl font-bold mb-6 text-center">Register</h2>
+    <div className="auth-bg">
+      <div style={{ width: "100%", maxWidth: 420, padding: "0 16px" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              background: "linear-gradient(135deg, #6c63ff, #a78bfa)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 24,
+              fontWeight: 900,
+              color: "white",
+              margin: "0 auto 16px",
+              boxShadow: "0 8px 32px rgba(108,99,255,0.3)",
+            }}
+          >
+            D
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>
+            Join DevConnect
+          </h1>
+          <p style={{ fontSize: 15, color: "var(--text-muted)" }}>
+            Connect with developers worldwide
+          </p>
+        </div>
 
-        <input
-          type="text"
-          name="username"
-          placeholder="Username"
-          className="w-full p-3 border rounded mb-4"
-          onChange={handleChange}
-        />
+        <div className="card" style={{ borderRadius: 20, padding: 32 }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Username
+              </label>
+              <input
+                id="register-username"
+                type="text"
+                name="username"
+                placeholder="ritikdev"
+                className="input-field"
+                value={formData.username}
+                onChange={handleChange}
+                autoComplete="username"
+              />
+            </div>
 
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          className="w-full p-3 border rounded mb-4"
-          onChange={handleChange}
-        />
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Email address
+              </label>
+              <input
+                id="register-email"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                className="input-field"
+                value={formData.email}
+                onChange={handleChange}
+                autoComplete="email"
+              />
+            </div>
 
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          className="w-full p-3 border rounded mb-4"
-          onChange={handleChange}
-        />
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Password
+              </label>
+              <input
+                id="register-password"
+                type="password"
+                name="password"
+                placeholder="Min. 6 characters"
+                className="input-field"
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete="new-password"
+              />
+            </div>
 
-        <button className="w-full bg-black text-white p-3 rounded">
-          Register
-        </button>
+            <button
+              id="register-submit-btn"
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              style={{ marginTop: 8 }}
+            >
+              {loading ? (
+                <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+              ) : (
+                "Create Account"
+              )}
+            </button>
+          </form>
 
-        <p className="mt-4 text-center">
-          Already have an account?{" "}
-          <Link to="/" className="text-blue-500">
-            Login
-          </Link>
-        </p>
-      </form>
+          <div className="divider" />
+
+          <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
+            Already have an account?{" "}
+            <Link
+              to="/"
+              style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
+            >
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

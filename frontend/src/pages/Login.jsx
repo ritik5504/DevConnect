@@ -1,72 +1,137 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import API from "../api/axios";
 import toast from "react-hot-toast";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    if (!formData.email || !formData.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
     try {
+      setLoading(true);
       const res = await API.post("/auth/login", formData);
-
-      localStorage.setItem("token", res.data.accessToken);
-      toast.success("Login successful");
+      const token = res.data.accessToken;
+      localStorage.setItem("token", token);
+      // Fetch user data
+      const meRes = await API.get("/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      login(token, meRes.data.user);
+      toast.success("Welcome back! 🎉");
       navigate("/home");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-xl shadow-lg w-96"
-      >
-        <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
+    <div className="auth-bg">
+      <div style={{ width: "100%", maxWidth: 420, padding: "0 16px" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              background: "linear-gradient(135deg, #6c63ff, #a78bfa)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 24,
+              fontWeight: 900,
+              color: "white",
+              margin: "0 auto 16px",
+              boxShadow: "0 8px 32px rgba(108,99,255,0.3)",
+            }}
+          >
+            D
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>
+            Welcome back
+          </h1>
+          <p style={{ fontSize: 15, color: "var(--text-muted)" }}>
+            Sign in to your DevConnect account
+          </p>
+        </div>
 
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          className="w-full p-3 border rounded mb-4"
-          onChange={handleChange}
-        />
+        {/* Form */}
+        <div className="card" style={{ borderRadius: 20, padding: 32 }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Email address
+              </label>
+              <input
+                id="login-email"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                className="input-field"
+                value={formData.email}
+                onChange={handleChange}
+                autoComplete="email"
+              />
+            </div>
 
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          className="w-full p-3 border rounded mb-4"
-          onChange={handleChange}
-        />
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Password
+              </label>
+              <input
+                id="login-password"
+                type="password"
+                name="password"
+                placeholder="••••••••"
+                className="input-field"
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete="current-password"
+              />
+            </div>
 
-        <button className="w-full bg-black text-white p-3 rounded">
-          Login
-        </button>
+            <button
+              id="login-submit-btn"
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              style={{ marginTop: 8 }}
+            >
+              {loading ? (
+                <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+              ) : (
+                "Sign In"
+              )}
+            </button>
+          </form>
 
-        <p className="mt-4 text-center">
-          Don't have an account?{" "}
-          <Link to="/register" className="text-blue-500">
-            Register
-          </Link>
-        </p>
-      </form>
+          <div className="divider" />
+
+          <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
+            Don't have an account?{" "}
+            <Link
+              to="/register"
+              style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}
+            >
+              Create one
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

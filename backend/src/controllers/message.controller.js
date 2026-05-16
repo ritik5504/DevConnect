@@ -1,3 +1,5 @@
+import Message from "../models/message.model.js";
+
 export const getMessages = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -9,8 +11,10 @@ export const getMessages = async (req, res) => {
       ],
     }).sort({ createdAt: 1 });
 
-    res.json(messages);
+    // Return { messages } so frontend can access res.data.messages
+    res.json({ messages });
   } catch (error) {
+    console.error("GET MESSAGES ERROR:", error);
     res.status(500).json({ message: "Failed to fetch messages" });
   }
 };

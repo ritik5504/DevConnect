@@ -32,19 +32,26 @@ io.on("connection", (socket) => {
   });
 
   // send message
-  socket.on("sendMessage", async ({ senderId, receiverId, message }) => {
+  // Frontend sends { senderId, receiverId, text }
+  socket.on("sendMessage", async ({ senderId, receiverId, text }) => {
     try {
-      // save message in DB
+      // Save message to DB
       const newMessage = await Message.create({
         sender: senderId,
         receiver: receiverId,
-        text: message,
+        text,
       });
 
+      // Emit to receiver (if online)
       const receiverSocketId = onlineUsers.get(receiverId);
-
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("receiveMessage", newMessage);
+      }
+
+      // Echo back to sender so their message appears without a page refresh
+      const senderSocketId = onlineUsers.get(senderId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit("receiveMessage", newMessage);
       }
     } catch (error) {
       console.error("MESSAGE ERROR:", error);
