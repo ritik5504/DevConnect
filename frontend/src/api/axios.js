@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const apiURL = import.meta.env.VITE_API_URL || "https://devconnect-gn8n.onrender.com";
+
 const API = axios.create({
-  baseURL: "http://localhost:3000/api",
+  baseURL: `${apiURL}/api`,
 });
 
 // Attach JWT token to every request
