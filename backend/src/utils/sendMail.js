@@ -4,8 +4,8 @@ export const sendEmail = async (to, subject, text) => {
   try {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false, // Use STARTTLS on port 587
       auth: {
         user: process.env.EMAIL || process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
@@ -14,7 +14,7 @@ export const sendEmail = async (to, subject, text) => {
     });
 
     const info = await transporter.sendMail({
-      from: `DevConnect <${process.env.EMAIL}>`,
+      from: `DevConnect <${process.env.EMAIL || process.env.EMAIL_USER}>`,
       to,
       subject,
       text,
