@@ -41,6 +41,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Re-join socket room whenever socket connects or user changes
+  useEffect(() => {
+    if (!user) return;
+
+    const handleConnect = () => {
+      socket.emit("join", user._id);
+    };
+
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    socket.on("connect", handleConnect);
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [user]);
+
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (storedToken) {

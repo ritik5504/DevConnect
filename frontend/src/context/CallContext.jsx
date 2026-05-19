@@ -19,6 +19,7 @@ export const CallProvider = ({ children }) => {
   const peerConnection = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const iceCandidatesQueue = useRef([]);
 
   // STUN servers configuration
   const rtcConfig = {
@@ -28,12 +29,23 @@ export const CallProvider = ({ children }) => {
     ]
   };
 
+  const processQueuedCandidates = async () => {
+    if (peerConnection.current && peerConnection.current.remoteDescription) {
+      while (iceCandidatesQueue.current.length > 0) {
+        const candidate = iceCandidatesQueue.current.shift();
+        try {
+          await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding queued ice candidate", e);
+        }
+      }
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
     socket.on("incomingCall", async ({ signal, from, callerInfo }) => {
-      // If already in a call, we could reject automatically, but for now we'll just set it
-      // if we're not busy.
       if (activeCall || isCalling) return;
       setIncomingCall({ signal, from, callerInfo });
     });
@@ -42,6 +54,7 @@ export const CallProvider = ({ children }) => {
       if (peerConnection.current) {
         try {
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal));
+          await processQueuedCandidates();
         } catch (e) {
           console.error("Error setting remote description on accept", e);
         }
@@ -49,12 +62,14 @@ export const CallProvider = ({ children }) => {
     });
 
     socket.on("iceCandidate", async (candidate) => {
-      if (peerConnection.current) {
+      if (peerConnection.current && peerConnection.current.remoteDescription) {
         try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (e) {
           console.error("Error adding ice candidate", e);
         }
+      } else {
+        iceCandidatesQueue.current.push(candidate);
       }
     });
 
@@ -162,6 +177,7 @@ export const CallProvider = ({ children }) => {
 
       socket.emit("answerCall", { to: incomingCall.from, signal: answer });
       setIncomingCall(null);
+      await processQueuedCandidates();
     } catch (err) {
       console.error("Error creating answer", err);
       cleanupCall();
@@ -180,9 +196,6 @@ export const CallProvider = ({ children }) => {
       const peerId = activeCall.user._id;
       socket.emit("endCall", { to: peerId });
     } else if (isCalling) {
-      // If we are calling but no one answered yet
-      // we don't necessarily have activeCall.user._id if we didn't track it well.
-      // But we set activeCall on initiateCall.
       if (activeCall?.user?._id) {
          socket.emit("endCall", { to: activeCall.user._id });
       }
@@ -203,6 +216,7 @@ export const CallProvider = ({ children }) => {
     setActiveCall(null);
     setIncomingCall(null);
     setIsCalling(false);
+    iceCandidatesQueue.current = [];
   };
 
   return (
