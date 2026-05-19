@@ -3,14 +3,63 @@ import Layout from "../components/Layout";
 import CreatePost from "../components/CreatePost";
 import PostCard from "../components/PostCard";
 import API from "../api/axios";
+import socket from "../socket/socket";
+import { useAuth } from "../context/AuthContext";
 
 const Home = () => {
+  const { user } = useAuth();
   const [feedType, setFeedType] = useState("all"); // 'all' or 'following'
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    const handleNewPost = (newPost) => {
+      if (feedType === "all") {
+        setPosts((prev) => {
+          if (prev.some((p) => p._id === newPost._id)) return prev;
+          return [newPost, ...prev];
+        });
+      } else if (feedType === "following") {
+        if (user && (user.following?.includes(newPost.user?._id || newPost.user) || newPost.user?._id === user._id)) {
+          setPosts((prev) => {
+            if (prev.some((p) => p._id === newPost._id)) return prev;
+            return [newPost, ...prev];
+          });
+        }
+      }
+    };
+
+    const handlePostLiked = ({ postId, likes }) => {
+      setPosts((prev) =>
+        prev.map((post) => (post._id === postId ? { ...post, likes } : post))
+      );
+    };
+
+    const handlePostCommented = ({ postId, comments }) => {
+      setPosts((prev) =>
+        prev.map((post) => (post._id === postId ? { ...post, comments } : post))
+      );
+    };
+
+    const handlePostDeleted = ({ postId }) => {
+      setPosts((prev) => prev.filter((post) => post._id !== postId));
+    };
+
+    socket.on("newPost", handleNewPost);
+    socket.on("postLiked", handlePostLiked);
+    socket.on("postCommented", handlePostCommented);
+    socket.on("postDeleted", handlePostDeleted);
+
+    return () => {
+      socket.off("newPost", handleNewPost);
+      socket.off("postLiked", handlePostLiked);
+      socket.off("postCommented", handlePostCommented);
+      socket.off("postDeleted", handlePostDeleted);
+    };
+  }, [feedType, user]);
 
   const fetchPosts = async (pageNum = 1, type = feedType) => {
     try {

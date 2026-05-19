@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import SearchBar from "../components/SearchBar";
 import UserList from "../components/UserList";
@@ -25,9 +25,10 @@ const Search = () => {
     load();
   }, []);
 
-  const handleResults = (users) => {
+  const handleResults = (users, query) => {
     setResults(users);
-    setHasSearched(true);
+    // Only mark as "searched" if user actually typed something
+    setHasSearched(query !== undefined ? query.trim().length > 0 : users.length > 0);
   };
 
   return (

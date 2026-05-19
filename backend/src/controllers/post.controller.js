@@ -4,7 +4,7 @@ import User from "../models/user.model.js";
 // CREATE POST
 export const createPost = async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, image } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: "Content required" });
@@ -13,10 +13,17 @@ export const createPost = async (req, res) => {
     const post = await Post.create({
       user: req.user.id,
       content,
+      image,
     });
 
     // Populate user so frontend can display username immediately
     const populated = await post.populate("user", "username profilePic skills");
+
+    // Broadcast new post in real-time
+    const io = req.app.get("socketio");
+    if (io) {
+      io.emit("newPost", populated);
+    }
 
     // Return { post } so frontend can access res.data.post
     res.json({ post: populated });
@@ -67,6 +74,32 @@ export const likePost = async (req, res) => {
 
     await post.save();
 
+    const io = req.app.get("socketio");
+    if (io) {
+      io.emit("postLiked", { postId: post._id, likes: post.likes });
+    }
+
+    // Trigger notification if it's a like (not unlike) and not self-action
+    if (!alreadyLiked && post.user.toString() !== userId) {
+      const liker = await User.findById(userId).select("username profilePic");
+      const notification = {
+        _id: `like-${post._id}-${userId}`,
+        type: "like",
+        user: liker,
+        postId: post._id,
+        text: "liked your post",
+        createdAt: new Date(),
+      };
+
+      const onlineUsers = req.app.get("onlineUsers");
+      if (onlineUsers) {
+        const receiverSocketId = onlineUsers.get(post.user.toString());
+        if (receiverSocketId && io) {
+          io.to(receiverSocketId).emit("newNotification", notification);
+        }
+      }
+    }
+
     res.json({ likes: post.likes });
   } catch (error) {
     console.error("LIKE ERROR:", error);
@@ -94,6 +127,34 @@ export const addComment = async (req, res) => {
 
     const populated = await post.populate("comments.user", "username profilePic");
 
+    const io = req.app.get("socketio");
+    if (io) {
+      io.emit("postCommented", { postId: post._id, comments: populated.comments });
+    }
+
+    // Trigger notification if commenting on someone else's post
+    if (post.user.toString() !== req.user.id) {
+      const lastComment = populated.comments[populated.comments.length - 1];
+      const commenter = await User.findById(req.user.id).select("username profilePic");
+      
+      const notification = {
+        _id: `comment-${post._id}-${lastComment._id}`,
+        type: "comment",
+        user: commenter,
+        postId: post._id,
+        text: `commented on your post: "${lastComment.text?.slice(0, 60)}${lastComment.text?.length > 60 ? "..." : ""}"`,
+        createdAt: lastComment.createdAt,
+      };
+
+      const onlineUsers = req.app.get("onlineUsers");
+      if (onlineUsers) {
+        const receiverSocketId = onlineUsers.get(post.user.toString());
+        if (receiverSocketId && io) {
+          io.to(receiverSocketId).emit("newNotification", notification);
+        }
+      }
+    }
+
     res.json({ comments: populated.comments });
   } catch (error) {
     console.error("COMMENT ERROR:", error);
@@ -115,6 +176,12 @@ export const deletePost = async (req, res) => {
     }
 
     await post.deleteOne();
+
+    const io = req.app.get("socketio");
+    if (io) {
+      io.emit("postDeleted", { postId: req.params.id });
+    }
+
     res.json({ message: "Post deleted" });
   } catch (error) {
     console.error("DELETE POST ERROR:", error);

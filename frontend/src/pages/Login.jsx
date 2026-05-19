@@ -43,24 +43,17 @@ const Login = () => {
       <div style={{ width: "100%", maxWidth: 420, padding: "0 16px" }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div
+          <img
+            src="/logo.png"
+            alt="DevConnect"
             style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              background: "linear-gradient(135deg, #6c63ff, #a78bfa)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 24,
-              fontWeight: 900,
-              color: "white",
+              height: 140,
+              width: "auto",
+              objectFit: "contain",
               margin: "0 auto 16px",
-              boxShadow: "0 8px 32px rgba(108,99,255,0.3)",
+              boxShadow: "0 8px 32px rgba(212,175,55,0.05)",
             }}
-          >
-            D
-          </div>
+          />
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>
             Welcome back
           </h1>

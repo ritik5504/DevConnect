@@ -22,6 +22,9 @@ const io = new Server(server, {
 // store online users
 const onlineUsers = new Map();
 
+app.set("socketio", io);
+app.set("onlineUsers", onlineUsers);
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
@@ -55,6 +58,51 @@ io.on("connection", (socket) => {
       }
     } catch (error) {
       console.error("MESSAGE ERROR:", error);
+    }
+  });
+
+  // delete message
+  // Frontend sends { messageId, senderId, receiverId }
+  socket.on("deleteMessage", ({ messageId, senderId, receiverId }) => {
+    // Notify receiver their copy should be removed
+    const receiverSocketId = onlineUsers.get(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("messageDeleted", { messageId });
+    }
+    // Confirm deletion to sender
+    const senderSocketId = onlineUsers.get(senderId);
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messageDeleted", { messageId });
+    }
+  });
+
+  // --- WebRTC Video Call Signaling ---
+
+  socket.on("callUser", ({ userToCall, signalData, from, callerInfo }) => {
+    const receiverSocketId = onlineUsers.get(userToCall);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("incomingCall", { signal: signalData, from, callerInfo });
+    }
+  });
+
+  socket.on("answerCall", ({ to, signal }) => {
+    const callerSocketId = onlineUsers.get(to);
+    if (callerSocketId) {
+      io.to(callerSocketId).emit("callAccepted", signal);
+    }
+  });
+
+  socket.on("iceCandidate", ({ to, candidate }) => {
+    const receiverSocketId = onlineUsers.get(to);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("iceCandidate", candidate);
+    }
+  });
+
+  socket.on("endCall", ({ to }) => {
+    const receiverSocketId = onlineUsers.get(to);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("endCall");
     }
   });
 

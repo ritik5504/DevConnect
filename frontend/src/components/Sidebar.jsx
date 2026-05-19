@@ -54,7 +54,7 @@ const navItems = [
 ];
 
 const Sidebar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, unreadMessages, unreadNotifications } = useAuth();
   const navigate = useNavigate();
 
   const getInitials = (name) =>
@@ -83,33 +83,27 @@ const Sidebar = () => {
         flexShrink: 0,
       }}
     >
-      {/* Logo */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 10,
+          gap: 2,
           padding: "8px 12px",
           marginBottom: 24,
         }}
       >
-        <div
+        <img
+          src="/logo.png"
+          alt="DevConnect"
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: "linear-gradient(135deg, #6c63ff, #a78bfa)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-            fontWeight: 800,
-            color: "white",
+            height: 64,
+            width: "auto",
+            borderRadius: 4,
+            objectFit: "contain",
+            marginRight: -14,
             flexShrink: 0,
           }}
-        >
-          D
-        </div>
+        />
         <span style={{ fontWeight: 700, fontSize: 18, color: "var(--text-primary)" }}>
           Dev<span className="gradient-text">Connect</span>
         </span>
@@ -150,7 +144,40 @@ const Sidebar = () => {
               }
             }}
           >
-            {item.icon}
+            {/* Icon with badge */}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {item.icon}
+              {item.label === "Chat" && unreadMessages > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -4,
+                    right: -4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "var(--danger)",
+                    border: "2px solid var(--bg-secondary)",
+                    animation: "pulse-glow 1.5s infinite",
+                  }}
+                />
+              )}
+              {item.label === "Notifications" && unreadNotifications > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -4,
+                    right: -4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "var(--danger)",
+                    border: "2px solid var(--bg-secondary)",
+                    animation: "pulse-glow 1.5s infinite",
+                  }}
+                />
+              )}
+            </div>
             {item.label}
           </NavLink>
         ))}

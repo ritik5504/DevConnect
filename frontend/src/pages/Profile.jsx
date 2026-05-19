@@ -188,9 +188,11 @@ const Profile = () => {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginBottom: 4 }}>
               {profile.username}
             </h1>
-            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 10 }}>
-              {profile.email}
-            </p>
+            {isOwn && (
+              <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 10 }}>
+                {profile.email}
+              </p>
+            )}
             {profile.bio && (
               <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
                 {profile.bio}

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
+import { useAuth } from "../context/AuthContext";
 import API from "../api/axios";
+import socket from "../socket/socket";
 
 const getInitials = (name) =>
   name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
@@ -22,6 +24,23 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { clearUnreadNotifications } = useAuth();
+
+  // Clear badge when page is opened
+  useEffect(() => {
+    clearUnreadNotifications();
+  }, []);
+
+  // Listen for new notifications in real-time
+  useEffect(() => {
+    const handleNewNotif = (notif) => {
+      setNotifications((prev) => [notif, ...prev]);
+      clearUnreadNotifications();
+    };
+
+    socket.on("newNotification", handleNewNotif);
+    return () => socket.off("newNotification", handleNewNotif);
+  }, []);
 
   useEffect(() => {
     const load = async () => {

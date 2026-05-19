@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import API from "../api/axios";
@@ -29,6 +29,14 @@ const PostCard = ({ post, onDelete }) => {
   const [likeLoading, setLikeLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  useEffect(() => {
+    setLikes(post.likes || []);
+  }, [post.likes]);
+
+  useEffect(() => {
+    setComments(post.comments || []);
+  }, [post.comments]);
 
   const isLiked = user && likes.includes(user._id);
   const isOwner = user && post.user?._id === user._id;
@@ -140,9 +148,15 @@ const PostCard = ({ post, onDelete }) => {
       </div>
 
       {/* Content */}
-      <p style={{ fontSize: 15, lineHeight: 1.7, color: "var(--text-primary)", marginBottom: 16, whiteSpace: "pre-wrap" }}>
+      <p style={{ fontSize: 15, lineHeight: 1.7, color: "var(--text-primary)", marginBottom: post.image ? 12 : 16, whiteSpace: "pre-wrap" }}>
         {post.content}
       </p>
+
+      {post.image && (
+        <div style={{ marginBottom: 16, borderRadius: 12, overflow: "hidden" }}>
+          <img src={post.image} alt="Post attachment" style={{ width: "100%", maxHeight: 400, objectFit: "cover", display: "block" }} />
+        </div>
+      )}
 
       {/* Actions */}
       <div className="divider" style={{ marginBottom: 12 }} />

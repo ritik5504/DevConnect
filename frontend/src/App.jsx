@@ -9,10 +9,12 @@ import Search from "./pages/Search";
 import Chat from "./pages/Chat";
 import Notifications from "./pages/Notifications";
 import ProtectedRoute from "./components/ProtectedRoute";
+import VideoCallModal from "./components/VideoCallModal";
 
 function App() {
   return (
     <BrowserRouter>
+      <VideoCallModal />
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />

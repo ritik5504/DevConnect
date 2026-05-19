@@ -25,7 +25,8 @@ const SearchBar = ({ onResults, placeholder = "Search developers..." }) => {
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
-      onResults?.([]);
+      setOpen(false);
+      onResults?.([], "");  // pass empty string so parent knows query was cleared
       return;
     }
     const t = setTimeout(async () => {
@@ -34,7 +35,7 @@ const SearchBar = ({ onResults, placeholder = "Search developers..." }) => {
         const res = await API.get(`/user/search?query=${encodeURIComponent(query)}`);
         const users = res.data.users || [];
         setResults(users);
-        onResults?.(users);
+        onResults?.(users, query);  // pass query so parent knows search is active
         setOpen(true);
       } catch {
         toast.error("Search failed");
@@ -80,7 +81,7 @@ const SearchBar = ({ onResults, placeholder = "Search developers..." }) => {
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{u.username}</div>
-                {u.skills?.length > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{u.skills.slice(0, 3).join(" · ")}</div>}
+                {Array.isArray(u.skills) && u.skills.length > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{u.skills.slice(0, 3).join(" · ")}</div>}
               </div>
             </div>
           ))}

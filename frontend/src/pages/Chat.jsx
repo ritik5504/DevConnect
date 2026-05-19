@@ -4,18 +4,42 @@ import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import ChatWindow from "../components/ChatWindow";
 import API from "../api/axios";
+import socket from "../socket/socket";
 
 const getInitials = (name) =>
   name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
 const Chat = () => {
-  const { user } = useAuth();
+  const { user, setOnChatPage, unreadSenders, setUnreadSenders } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Mark chat page as active so incoming messages don't increment badge
+  useEffect(() => {
+    setOnChatPage(true);
+    return () => setOnChatPage(false);
+  }, []);
+
+  // Listen for incoming messages to show red dot on specific user
+  useEffect(() => {
+    const handleReceive = (msg) => {
+      const senderId = msg.sender?._id || msg.sender;
+      // If message is from someone else and NOT the currently selected user
+      if (senderId !== user?._id && senderId !== selectedUser?._id) {
+        setUnreadSenders((prev) => ({
+          ...prev,
+          [senderId]: (prev[senderId] || 0) + 1,
+        }));
+      }
+    };
+
+    socket.on("receiveMessage", handleReceive);
+    return () => socket.off("receiveMessage", handleReceive);
+  }, [user, selectedUser, setUnreadSenders]);
 
   // Load all known users (from search with empty query)
   useEffect(() => {
@@ -40,6 +64,11 @@ const Chat = () => {
               /* ignore */
             }
           }
+          setUnreadSenders((prev) => {
+            const newCounts = { ...prev };
+            delete newCounts[userId];
+            return newCounts;
+          });
         }
       } catch {
         /* ignore */
@@ -125,10 +154,19 @@ const Chat = () => {
                 No conversations yet
               </div>
             ) : (
-              filtered.map((u) => (
+              filtered.map((u) => {
+                const hasUnread = unreadSenders[u._id] > 0;
+                return (
                 <div
                   key={u._id}
-                  onClick={() => setSelectedUser(u)}
+                  onClick={() => {
+                    setSelectedUser(u);
+                    setUnreadSenders((prev) => {
+                      const newCounts = { ...prev };
+                      delete newCounts[u._id];
+                      return newCounts;
+                    });
+                  }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -163,8 +201,21 @@ const Chat = () => {
                       </div>
                     )}
                   </div>
+                  {hasUnread && (
+                    <div
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: "var(--danger)",
+                        flexShrink: 0,
+                        boxShadow: "0 0 8px var(--danger)",
+                      }}
+                    />
+                  )}
                 </div>
-              ))
+              );
+            })
             )}
           </div>
         </div>

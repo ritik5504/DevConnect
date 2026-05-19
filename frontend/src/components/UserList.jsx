@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import API from "../api/axios";
@@ -14,6 +14,10 @@ const UserCard = ({ user: targetUser }) => {
     targetUser.followers?.includes(currentUser?._id)
   );
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setFollowing(targetUser.followers?.includes(currentUser?._id));
+  }, [targetUser.followers, currentUser?._id]);
 
   if (targetUser._id === currentUser?._id) return null;
 
@@ -61,7 +65,7 @@ const UserCard = ({ user: targetUser }) => {
             {targetUser.bio}
           </div>
         )}
-        {targetUser.skills?.length > 0 && (
+        {Array.isArray(targetUser.skills) && targetUser.skills.length > 0 && (
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {targetUser.skills.slice(0, 3).map((s) => (
               <span key={s} className="tag" style={{ fontSize: 10, padding: "2px 8px" }}>{s}</span>

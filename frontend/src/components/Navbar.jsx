@@ -5,7 +5,7 @@ import API from "../api/axios";
 import NotificationDropdown from "./NotificationDropdown";
 
 const Navbar = ({ onMenuClick, isMobile }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, unreadNotifications, clearUnreadNotifications } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -108,32 +108,27 @@ const Navbar = ({ onMenuClick, isMobile }) => {
           </button>
         )}
 
-        {/* Logo */}
         <Link
           to="/home"
           style={{
             display: isMobile && searchQuery ? "none" : "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 2,
             textDecoration: "none",
           }}
         >
-          <div
+          <img
+            src="/logo.png"
+            alt="DevConnect"
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: "linear-gradient(135deg, #6c63ff, #a78bfa)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 14,
-              fontWeight: 800,
-              color: "white",
+              height: 52,
+              width: "auto",
+              borderRadius: 4,
+              objectFit: "contain",
+              marginRight: -10,
+              flexShrink: 0,
             }}
-          >
-            D
-          </div>
+          />
           {!isMobile && (
             <span
               style={{ fontWeight: 700, fontSize: 18, color: "var(--text-primary)" }}
@@ -260,7 +255,7 @@ const Navbar = ({ onMenuClick, isMobile }) => {
                     >
                       {u.username}
                     </div>
-                    {u.skills?.length > 0 && (
+                    {Array.isArray(u.skills) && u.skills.length > 0 && (
                       <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                         {u.skills.slice(0, 3).join(" · ")}
                       </div>
@@ -279,7 +274,10 @@ const Navbar = ({ onMenuClick, isMobile }) => {
         <div ref={notifRef} style={{ position: "relative" }}>
           <button
             id="notif-btn"
-            onClick={() => setNotifOpen(!notifOpen)}
+            onClick={() => {
+              setNotifOpen(!notifOpen);
+              if (!notifOpen) clearUnreadNotifications();
+            }}
             style={{
               width: 40,
               height: 40,
@@ -306,6 +304,22 @@ const Navbar = ({ onMenuClick, isMobile }) => {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
+            {/* Unread badge */}
+            {unreadNotifications > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: 6,
+                  right: 6,
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "var(--danger)",
+                  border: "2px solid var(--bg-primary)",
+                  animation: "pulse-glow 1.5s infinite",
+                }}
+              />
+            )}
           </button>
           {notifOpen && <NotificationDropdown onClose={() => setNotifOpen(false)} />}
         </div>
