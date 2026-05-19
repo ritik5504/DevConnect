@@ -58,8 +58,8 @@ export const register = async (req, res) => {
       expiry: Date.now() + 5 * 60 * 1000, // 5 min
     });
 
-    // send email
-    await sendEmail(
+    // send email asynchronously in background so response returns instantly
+    sendEmail(
       email,
       "OTP Verification",
       `Your OTP is ${otp}`
