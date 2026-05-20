@@ -30,16 +30,15 @@ export const sendEmail = async (to, subject, text) => {
     });
 
     const info = await transporter.sendMail({
-      from: `DevConnect <${user}>`,
+      from: "DevConnect <rajsahil5504@gmail.com>",
       to,
       subject,
       html: otp 
         ? `
           <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px;">
-            <h2 style="color: #333;">DevConnect OTP Verification</h2>
-            <p>Your OTP is:</p>
+            <h2 style="color: #333;">Verify your account</h2>
             <h1 style="font-size: 36px; letter-spacing: 4px; color: #6c63ff; margin: 20px 0; font-weight: bold;">${otp}</h1>
-            <p style="color: #666; font-size: 14px;">This code is valid for 5 minutes. If you did not request this code, please ignore this email.</p>
+            <p style="color: #666; font-size: 14px;">This OTP expires in 10 minutes.</p>
           </div>
         `
         : `<p>${text}</p>`,
