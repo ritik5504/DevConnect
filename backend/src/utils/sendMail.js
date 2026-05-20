@@ -1,6 +1,8 @@
 import nodemailer from "nodemailer";
 
 export const sendEmail = async (to, subject, text) => {
+  let lastError = null;
+
   // If RESEND_API_KEY is available, use Resend HTTP API (bypasses Render SMTP port blocking)
   if (process.env.RESEND_API_KEY) {
     try {
@@ -27,6 +29,7 @@ export const sendEmail = async (to, subject, text) => {
       return;
     } catch (error) {
       console.error("RESEND API ERROR:", error.message);
+      lastError = error;
       // Fallback to SMTP
     }
   }
@@ -55,5 +58,6 @@ export const sendEmail = async (to, subject, text) => {
     console.log("Email sent via SMTP:", info.response);
   } catch (error) {
     console.error("EMAIL SMTP ERROR:", error.message);
+    throw lastError || error;
   }
 };

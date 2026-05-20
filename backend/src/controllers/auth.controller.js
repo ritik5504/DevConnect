@@ -37,38 +37,56 @@ const generateOTP = () => {
  */
 export const register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, resend } = req.body;
 
-    // ❌ if already exists
-    const existingUser = await userModel.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({
-        message: "User already exists, please login",
-      });
+    let existingData = null;
+    if (resend) {
+      existingData = otpStore.get(email);
+      if (!existingData) {
+        return res.status(400).json({
+          message: "Registration session expired. Please register again.",
+        });
+      }
+    } else {
+      // ❌ if already exists
+      const existingUser = await userModel.findOne({ email });
+      if (existingUser) {
+        return res.status(409).json({
+          message: "User already exists, please login",
+        });
+      }
     }
 
     const otp = generateOTP();
 
     // store temporarily
     otpStore.set(email, {
-      username,
+      username: resend ? existingData.username : username,
       email,
-      password,
+      password: resend ? existingData.password : password,
       otp,
       expiry: Date.now() + 5 * 60 * 1000, // 5 min
     });
 
-    // send email asynchronously in background so response returns instantly
-    sendEmail(
-      email,
-      "OTP Verification",
-      `Your OTP is ${otp}`
-    );
-
-    console.log("OTP SENT:", otp); // debug
+    try {
+      // Send email synchronously (awaited) to catch and return SMTP/Resend errors
+      await sendEmail(
+        email,
+        "OTP Verification",
+        `Your OTP is ${otp}`
+      );
+      console.log("OTP SENT:", otp); // debug
+    } catch (emailError) {
+      console.error("Failed to send OTP email:", emailError.message);
+      // Remove the OTP session since we failed to send the email
+      otpStore.delete(email);
+      return res.status(500).json({
+        message: `Failed to send email: ${emailError.message}`,
+      });
+    }
 
     res.json({
-      message: "OTP sent to your email",
+      message: resend ? "OTP resent successfully" : "OTP sent to your email",
     });
   } catch (error) {
     res.status(500).json({
