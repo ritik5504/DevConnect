@@ -1,24 +1,38 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 export const sendEmail = async (to, subject, text) => {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("RESEND_API_KEY environment variable is not defined");
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || "587", 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    throw new Error("SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS) is missing in environment variables");
   }
 
-  const resend = new Resend(apiKey);
-
   try {
-    console.log("Sending email via Resend SDK...");
+    console.log(`Sending email via SMTP (${host}:${port})...`);
     
     // Extract 6-digit OTP from text if available
     const otpMatch = text.match(/\d{6}/);
     const otp = otpMatch ? otpMatch[0] : "";
 
-    const { data, error } = await resend.emails.send({
-      from: "DevConnect <onboarding@resend.dev>",
-      to: to,
-      subject: subject,
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465, // true for 465, false for other ports like 587 or 2525
+      auth: {
+        user,
+        pass,
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+    });
+
+    const info = await transporter.sendMail({
+      from: `DevConnect <${user}>`,
+      to,
+      subject,
       html: otp 
         ? `
           <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px;">
@@ -31,13 +45,9 @@ export const sendEmail = async (to, subject, text) => {
         : `<p>${text}</p>`,
     });
 
-    if (error) {
-      throw error;
-    }
-
-    console.log("Email sent via Resend API:", data.id);
+    console.log("Email sent via SMTP:", info.response);
   } catch (error) {
-    console.error("RESEND SDK ERROR:", error.message || error);
+    console.error("EMAIL SMTP ERROR:", error.message);
     throw error;
   }
 };
