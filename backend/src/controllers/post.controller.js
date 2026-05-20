@@ -1,5 +1,6 @@
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
+import Notification from "../models/notification.model.js";
 
 // CREATE POST
 export const createPost = async (req, res) => {
@@ -91,11 +92,20 @@ export const likePost = async (req, res) => {
         createdAt: new Date(),
       };
 
+      // Persist notification in DB
+      await Notification.create({
+        recipient: post.user,
+        sender: userId,
+        type: "like",
+        postId: post._id,
+        text: "liked your post",
+      });
+
       const onlineUsers = req.app.get("onlineUsers");
       if (onlineUsers) {
         const receiverSocketId = onlineUsers.get(post.user.toString());
         if (receiverSocketId && io) {
-          io.to(receiverSocketId).emit("newNotification", notification);
+          io.to(receiverSocketId).emit("newNotification", { ...notification, user: liker });
         }
       }
     }
@@ -136,13 +146,23 @@ export const addComment = async (req, res) => {
     if (post.user.toString() !== req.user.id) {
       const lastComment = populated.comments[populated.comments.length - 1];
       const commenter = await User.findById(req.user.id).select("username profilePic");
-      
+      const notifText = `commented on your post: "${lastComment.text?.slice(0, 60)}${lastComment.text?.length > 60 ? "..." : ""}"`;
+
+      // Persist notification in DB
+      await Notification.create({
+        recipient: post.user,
+        sender: req.user.id,
+        type: "comment",
+        postId: post._id,
+        text: notifText,
+      });
+
       const notification = {
         _id: `comment-${post._id}-${lastComment._id}`,
         type: "comment",
         user: commenter,
         postId: post._id,
-        text: `commented on your post: "${lastComment.text?.slice(0, 60)}${lastComment.text?.length > 60 ? "..." : ""}"`,
+        text: notifText,
         createdAt: lastComment.createdAt,
       };
 

@@ -26,60 +26,19 @@ const Notifications = () => {
   const navigate = useNavigate();
   const { clearUnreadNotifications } = useAuth();
 
-  // Clear badge when page is opened
+  // Clear badge when page is opened and mark all as read on server
   useEffect(() => {
     clearUnreadNotifications();
+    API.put("/notification/read").catch(() => {});
   }, []);
 
-  // Listen for new notifications in real-time
-  useEffect(() => {
-    const handleNewNotif = (notif) => {
-      setNotifications((prev) => [notif, ...prev]);
-      clearUnreadNotifications();
-    };
-
-    socket.on("newNotification", handleNewNotif);
-    return () => socket.off("newNotification", handleNewNotif);
-  }, []);
-
+  // Load notifications from real API — only notifications for the current user
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        // Using posts as a proxy for activity feed since there's no dedicated notifications endpoint in the schema
-        const res = await API.get("/post");
-        const posts = res.data.posts || [];
-        
-        const notifs = [];
-        posts.slice(0, 20).forEach((post) => {
-          post.comments?.forEach((c) => {
-            notifs.push({
-              _id: `comment-${post._id}-${c._id || Math.random()}`,
-              type: "comment",
-              user: c.user,
-              postId: post._id,
-              text: `commented on your post: "${c.text?.slice(0, 60)}${c.text?.length > 60 ? "..." : ""}"`,
-              createdAt: c.createdAt || post.createdAt,
-            });
-          });
-          
-          post.likes?.forEach((likeId) => {
-            // In a real app, you'd fetch the user info for the like
-            // Here we just use a generic "Someone" if we don't have user info
-            notifs.push({
-              _id: `like-${post._id}-${likeId}`,
-              type: "like",
-              user: { _id: likeId, username: "Someone" },
-              postId: post._id,
-              text: "liked your post",
-              createdAt: post.createdAt,
-            });
-          });
-        });
-        
-        // Sort by date
-        notifs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setNotifications(notifs);
+        const res = await API.get("/notification");
+        setNotifications(res.data.notifications || []);
       } catch {
         /* ignore */
       } finally {
@@ -87,6 +46,16 @@ const Notifications = () => {
       }
     };
     load();
+  }, []);
+
+  // Listen for new real-time notifications (like/comment on your post)
+  useEffect(() => {
+    const handleNewNotif = (notif) => {
+      setNotifications((prev) => [notif, ...prev]);
+      clearUnreadNotifications();
+    };
+    socket.on("newNotification", handleNewNotif);
+    return () => socket.off("newNotification", handleNewNotif);
   }, []);
 
   const typeIcon = (type) => {
@@ -100,11 +69,14 @@ const Notifications = () => {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
       </div>
     );
-    return (
-      <div style={{ width: 40, height: 40, borderRadius: "12px", background: "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-      </div>
-    );
+    return null;
+  };
+
+  const getSenderAvatar = (sender) => {
+    if (sender?.profilePic) {
+      return <img src={sender.profilePic} alt={sender.username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+    }
+    return getInitials(sender?.username);
   };
 
   return (
@@ -115,7 +87,7 @@ const Notifications = () => {
             Notifications
           </h1>
           <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
-            Stay updated with your latest activity
+            Likes and comments on your posts
           </p>
         </div>
 
@@ -142,42 +114,62 @@ const Notifications = () => {
                 Quiet for now
               </h3>
               <p style={{ fontSize: 14 }}>
-                When you get likes or comments, they'll show up here.
+                When someone likes or comments on your post, it'll show up here.
               </p>
             </div>
           ) : (
             <div>
-              {notifications.map((n) => (
-                <div
-                  key={n._id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "16px 20px",
-                    cursor: "pointer",
-                    transition: "background 0.15s",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  onClick={() => {
-                    if (n.postId) navigate(`/home`); // Scroll to post would be better
-                    else if (n.user?._id) navigate(`/profile/${n.user._id}`);
-                  }}
-                >
-                  {typeIcon(n.type)}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, color: "var(--text-primary)", lineHeight: 1.5 }}>
-                      <strong style={{ fontWeight: 700 }}>{n.user?.username || "Someone"}</strong>{" "}
-                      {n.text}
+              {notifications.map((n, idx) => {
+                const sender = n.sender || n.user;
+                return (
+                  <div
+                    key={n._id || idx}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "16px 20px",
+                      cursor: "pointer",
+                      transition: "background 0.15s",
+                      borderBottom: "1px solid var(--border)",
+                      background: n.read === false ? "rgba(108,99,255,0.04)" : "transparent",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = n.read === false ? "rgba(108,99,255,0.04)" : "transparent")}
+                    onClick={() => {
+                      if (sender?._id) navigate(`/profile/${sender._id}`);
+                    }}
+                  >
+                    {/* Sender avatar */}
+                    <div
+                      className="avatar"
+                      style={{ width: 40, height: 40, fontSize: 14, overflow: "hidden", flexShrink: 0, position: "relative" }}
+                    >
+                      {getSenderAvatar(sender)}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                      {formatTime(n.createdAt)}
+
+                    {/* Type icon badge */}
+                    <div style={{ flexShrink: 0, marginLeft: -16, marginTop: 20 }}>
+                      {typeIcon(n.type)}
                     </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: "var(--text-primary)", lineHeight: 1.5 }}>
+                        <strong style={{ fontWeight: 700 }}>{sender?.username || "Someone"}</strong>{" "}
+                        {n.text}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                        {formatTime(n.createdAt)}
+                      </div>
+                    </div>
+
+                    {/* Unread dot */}
+                    {n.read === false && (
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, boxShadow: "0 0 6px var(--accent)" }} />
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

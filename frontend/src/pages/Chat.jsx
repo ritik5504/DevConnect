@@ -41,11 +41,11 @@ const Chat = () => {
     return () => socket.off("receiveMessage", handleReceive);
   }, [user, selectedUser, setUnreadSenders]);
 
-  // Load all known users (from search with empty query)
+  // Load only connections (people you follow or who follow you)
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await API.get("/user/search?query=");
+        const res = await API.get("/user/connections");
         const allUsers = (res.data.users || []).filter((u) => u._id !== user?._id);
         setUsers(allUsers);
 
@@ -56,7 +56,7 @@ const Chat = () => {
           if (found) {
             setSelectedUser(found);
           } else {
-            // Fetch that specific user
+            // Fetch that specific user even if not in connections yet
             try {
               const userRes = await API.get(`/user/${userId}`);
               setSelectedUser(userRes.data.user);
@@ -151,7 +151,7 @@ const Chat = () => {
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-                No conversations yet
+                {searchQuery ? "No results found" : "Follow someone to start chatting"}
               </div>
             ) : (
               filtered.map((u) => {

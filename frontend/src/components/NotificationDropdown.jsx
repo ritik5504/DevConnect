@@ -22,29 +22,12 @@ const NotificationDropdown = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Simulated notifications from follow/like activity
-  // In production this would be a dedicated /notifications endpoint
+  // Load real notifications — only for your own posts
   useEffect(() => {
     const load = async () => {
       try {
-        // Use posts as a proxy for activity feed
-        const res = await API.get("/post");
-        const posts = res.data.posts || [];
-        // Build fake notifications from recent likes & comments
-        const notifs = [];
-        posts.slice(0, 10).forEach((post) => {
-          post.comments?.slice(-2).forEach((c) => {
-            notifs.push({
-              _id: `comment-${post._id}-${c._id || Math.random()}`,
-              type: "comment",
-              user: c.user,
-              postId: post._id,
-              text: `commented on your post: "${c.text?.slice(0, 40)}..."`,
-              createdAt: c.createdAt || post.createdAt,
-            });
-          });
-        });
-        setNotifications(notifs.slice(0, 8));
+        const res = await API.get("/notification");
+        setNotifications((res.data.notifications || []).slice(0, 8));
       } catch {
         /* ignore */
       } finally {
@@ -65,11 +48,7 @@ const NotificationDropdown = ({ onClose }) => {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
       </div>
     );
-    return (
-      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-      </div>
-    );
+    return null;
   };
 
   return (
@@ -106,34 +85,53 @@ const NotificationDropdown = ({ onClose }) => {
             No notifications yet
           </div>
         ) : (
-          notifications.map((n) => (
-            <div
-              key={n._id}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                padding: "12px 18px",
-                cursor: "pointer",
-                transition: "background 0.15s",
-                borderBottom: "1px solid var(--border)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              onClick={() => { onClose?.(); if (n.user?._id) navigate(`/profile/${n.user._id}`); }}
-            >
-              {typeIcon(n.type)}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.4 }}>
-                  <strong>{n.user?.username || "Someone"}</strong>{" "}
-                  {n.text}
+          notifications.map((n, idx) => {
+            const sender = n.sender || n.user;
+            return (
+              <div
+                key={n._id || idx}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  padding: "12px 18px",
+                  cursor: "pointer",
+                  transition: "background 0.15s",
+                  borderBottom: "1px solid var(--border)",
+                  background: n.read === false ? "rgba(108,99,255,0.05)" : "transparent",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = n.read === false ? "rgba(108,99,255,0.05)" : "transparent")}
+                onClick={() => { onClose?.(); if (sender?._id) navigate(`/profile/${sender._id}`); }}
+              >
+                {/* Avatar */}
+                <div className="avatar" style={{ width: 32, height: 32, fontSize: 12, overflow: "hidden", flexShrink: 0 }}>
+                  {sender?.profilePic
+                    ? <img src={sender.profilePic} alt={sender.username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : getInitials(sender?.username)
+                  }
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
-                  {formatTime(n.createdAt)}
+
+                {/* Type icon */}
+                {typeIcon(n.type)}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                    <strong>{sender?.username || "Someone"}</strong>{" "}
+                    {n.text}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
+                    {formatTime(n.createdAt)}
+                  </div>
                 </div>
+
+                {/* Unread dot */}
+                {n.read === false && (
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 4 }} />
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

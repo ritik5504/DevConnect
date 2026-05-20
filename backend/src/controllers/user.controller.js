@@ -126,3 +126,31 @@ export const searchUsers = async (req, res) => {
     res.status(500).json({ message: "Search failed" });
   }
 };
+
+/**
+ * GET CONNECTIONS (followers + following union)
+ */
+export const getConnections = async (req, res) => {
+  try {
+    const user = await userModel
+      .findById(req.user.id)
+      .populate("followers", "username profilePic bio")
+      .populate("following", "username profilePic bio");
+
+    // Merge followers and following, remove duplicates by _id
+    const seen = new Set();
+    const connections = [];
+
+    for (const u of [...user.followers, ...user.following]) {
+      if (!seen.has(u._id.toString())) {
+        seen.add(u._id.toString());
+        connections.push(u);
+      }
+    }
+
+    res.json({ users: connections });
+  } catch (error) {
+    console.error("CONNECTIONS ERROR:", error);
+    res.status(500).json({ message: "Failed to get connections" });
+  }
+};

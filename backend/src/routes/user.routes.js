@@ -5,13 +5,17 @@ import {
   updateProfile,
   searchUsers,
   followUser,
-  unfollowUser
+  unfollowUser,
+  getConnections
 } from "../controllers/user.controller.js";
 
 const userRouter = Router();
 
 //  Search
 userRouter.get("/search", protect, searchUsers);
+
+//  Connections (followers + following)
+userRouter.get("/connections", protect, getConnections);
 
 //  Update profile
 userRouter.put("/update", protect, updateProfile);
