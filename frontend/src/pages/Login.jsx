@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import API from "../api/axios";
 import toast from "react-hot-toast";
+import { GoogleLogin } from '@react-oauth/google';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -112,7 +113,49 @@ const Login = () => {
             </button>
           </form>
 
-          <div className="divider" />
+          <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16, fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              <span>or continue with</span>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            </div>
+            
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <GoogleLogin
+                onSuccess={async (credentialResponse) => {
+                  try {
+                    setLoading(true);
+                    const res = await API.post("/auth/google", {
+                      token: credentialResponse.credential
+                    });
+                    const token = res.data.accessToken;
+                    localStorage.setItem("token", token);
+                    
+                    const meRes = await API.get("/auth/me", {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    
+                    login(token, meRes.data.user);
+                    toast.success("Logged in with Google! 🎉");
+                    navigate("/home");
+                  } catch (error) {
+                    console.error(error);
+                    toast.error("Google login failed");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                onError={() => {
+                  toast.error("Google Login Failed");
+                }}
+                theme="filled_black"
+                shape="pill"
+                size="large"
+              />
+            </div>
+          </div>
+
+          <div className="divider" style={{ marginTop: 24 }} />
 
           <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
             Don't have an account?{" "}

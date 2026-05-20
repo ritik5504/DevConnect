@@ -4,6 +4,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import { sendEmail } from "../utils/sendMail.js";
+import { OAuth2Client } from "google-auth-library";
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 /**
  * TEMP OTP STORE (in-memory)
@@ -200,6 +203,57 @@ export const login = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: error.message,
+    });
+  }
+};
+
+/**
+ * GOOGLE LOGIN
+ */
+export const googleLogin = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
+
+    let user = await userModel.findOne({ email });
+
+    if (!user) {
+      user = await userModel.create({
+        username: name.replace(/\s+/g, '').toLowerCase() + Math.floor(Math.random() * 1000), // ensure unique username
+        email,
+        profilePic: picture,
+        authProvider: "google",
+      });
+    }
+
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // create session
+    await Session.create({
+      userId: user._id,
+      refreshToken,
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      accessToken,
+      refreshToken,
+      user,
+    });
+  } catch (error) {
+    console.error("Google login error:", error);
+    res.status(500).json({
+      message: "Google login failed",
     });
   }
 };

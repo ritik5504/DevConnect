@@ -1,16 +1,14 @@
 import { useState, useEffect } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 const Layout = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (!mobile) setSidebarOpen(false);
+      setIsMobile(window.innerWidth < 768);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -18,42 +16,28 @@ const Layout = ({ children }) => {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg-primary)" }}>
-      {/* Sidebar Overlay for Mobile */}
-      {isMobile && sidebarOpen && (
+      {/* Sidebar - Desktop Only */}
+      {!isMobile && (
         <div
-          onClick={() => setSidebarOpen(false)}
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 90,
+            position: "sticky",
+            top: 0,
+            left: 0,
+            zIndex: 100,
+            height: "100vh",
           }}
-        />
+        >
+          <Sidebar />
+        </div>
       )}
-
-      {/* Sidebar */}
-      <div
-        style={{
-          position: isMobile ? "fixed" : "sticky",
-          top: 0,
-          left: 0,
-          zIndex: 100,
-          transform: isMobile && !sidebarOpen ? "translateX(-100%)" : "translateX(0)",
-          transition: "transform 0.3s ease",
-          height: "100vh",
-        }}
-      >
-        <Sidebar onLogout={() => setSidebarOpen(false)} />
-      </div>
 
       {/* Main content */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Navbar onMenuClick={() => setSidebarOpen(true)} isMobile={isMobile} />
+        <Navbar isMobile={isMobile} />
         <main
           style={{
             flex: 1,
-            padding: isMobile ? "16px" : "24px",
+            padding: isMobile ? "12px 12px 80px 12px" : "24px",
             maxWidth: 1000,
             width: "100%",
             margin: "0 auto",
@@ -62,6 +46,9 @@ const Layout = ({ children }) => {
           {children}
         </main>
       </div>
+
+      {/* Bottom Nav - Mobile Only */}
+      {isMobile && <BottomNav />}
     </div>
   );
 };

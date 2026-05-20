@@ -13,7 +13,7 @@ const formatTime = (dateStr) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-const ChatWindow = ({ selectedUser }) => {
+const ChatWindow = ({ selectedUser, onBack }) => {
   const { user } = useAuth();
   const { initiateCall } = useCall();
   const [messages, setMessages] = useState([]);
@@ -181,6 +181,27 @@ const ChatWindow = ({ selectedUser }) => {
           background: "var(--bg-card)",
         }}
       >
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-primary)",
+              cursor: "pointer",
+              padding: 4,
+              marginRight: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+        )}
         <div className="avatar" style={{ width: 40, height: 40, fontSize: 14, overflow: "hidden", flexShrink: 0 }}>
           {selectedUser.profilePic ? (
             <img src={selectedUser.profilePic} alt={selectedUser.username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />

@@ -21,6 +21,11 @@ authRouter.post("/register", authController.register);
 authRouter.post("/login", authController.login);
 
 /**
+ * GOOGLE LOGIN
+ */
+authRouter.post("/google", authController.googleLogin);
+
+/**
  * GET CURRENT USER (Protected)
  */
 authRouter.get("/me", protect, authController.getMe);

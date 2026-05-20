@@ -680,4 +680,8 @@ a:hover {
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+  .card {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
 }
