@@ -46,6 +46,8 @@ export const sendEmail = async (to, subject, text) => {
         pass: process.env.EMAIL_PASS,
       },
       family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 routing errors on Render
+      connectionTimeout: 5000, // Timeout after 5 seconds
+      greetingTimeout: 5000,
     });
 
     const info = await transporter.sendMail({
