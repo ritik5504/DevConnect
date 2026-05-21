@@ -4,7 +4,8 @@ const sendOtpEmail = async (userEmail, name, otp) => {
   const postData = JSON.stringify({
     service_id: process.env.EMAILJS_SERVICE_ID,
     template_id: process.env.EMAILJS_TEMPLATE_ID,
-    user_id: process.env.EMAILJS_PUBLIC_KEY,
+    publicKey: process.env.EMAILJS_PUBLIC_KEY,
+    privateKey: process.env.EMAILJS_PRIVATE_KEY,
     template_params: {
       to_email: userEmail,
       to_name: name || "User",
