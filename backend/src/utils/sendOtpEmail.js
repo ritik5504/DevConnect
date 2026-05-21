@@ -4,8 +4,8 @@ const sendOtpEmail = async (userEmail, name, otp) => {
   const postData = JSON.stringify({
     service_id: process.env.EMAILJS_SERVICE_ID,
     template_id: process.env.EMAILJS_TEMPLATE_ID,
-    publicKey: process.env.EMAILJS_PUBLIC_KEY,
-    privateKey: process.env.EMAILJS_PRIVATE_KEY,
+    user_id: process.env.EMAILJS_PUBLIC_KEY,   // IMPORTANT exact name
+    accessToken: process.env.EMAILJS_PRIVATE_KEY, // IMPORTANT exact name
     template_params: {
       to_email: userEmail,
       to_name: name || "User",
@@ -33,7 +33,7 @@ const sendOtpEmail = async (userEmail, name, otp) => {
 
       res.on("end", () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log("OTP email sent successfully");
+          console.log("OTP sent successfully");
           resolve(data);
         } else {
           console.error("EmailJS Error:", data);
@@ -42,7 +42,7 @@ const sendOtpEmail = async (userEmail, name, otp) => {
       });
     });
 
-    req.on("error", (err) => reject(err));
+    req.on("error", reject);
 
     req.write(postData);
     req.end();
