@@ -3,7 +3,7 @@ import Session from "../models/session.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
-import { sendEmail } from "../utils/sendMail.js";
+import sendOtpEmail from "../utils/sendOtpEmail.js";
 import { OAuth2Client } from "google-auth-library";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -71,22 +71,9 @@ export const register = async (req, res) => {
       expiry: Date.now() + 5 * 60 * 1000, // 5 min
     });
 
-    try {
-      // Send email synchronously (awaited) to catch and return SMTP/Resend errors
-      await sendEmail(
-        email,
-        "OTP Verification",
-        `Your OTP is ${otp}`
-      );
-      console.log("OTP SENT:", otp); // debug
-    } catch (emailError) {
-      console.error("Failed to send OTP email:", emailError.message);
-      // Remove the OTP session since we failed to send the email
-      otpStore.delete(email);
-      return res.status(500).json({
-        message: `Failed to send email: ${emailError.message}`,
-      });
-    }
+    const name = resend ? existingData.username : username;
+    await sendOtpEmail(email, name, otp);
+    console.log("OTP SENT (EmailJS):", otp); // debug
 
     res.json({
       message: resend ? "OTP resent successfully" : "OTP sent to your email",
