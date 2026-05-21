@@ -21,22 +21,45 @@ export const CallProvider = ({ children }) => {
   const remoteVideoRef = useRef(null);
   const iceCandidatesQueue = useRef([]);
 
-  // STUN servers configuration
+  // Refs for tracking active call status in persistent socket listeners
+  const activeCallRef = useRef(activeCall);
+  const isCallingRef = useRef(isCalling);
+
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+    isCallingRef.current = isCalling;
+  }, [activeCall, isCalling]);
+
+  // STUN & TURN servers configuration
   const rtcConfig = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" }
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+      { urls: "stun:stun3.l.google.com:19302" },
+      { urls: "stun:stun4.l.google.com:19302" },
+      {
+        urls: [
+          "turn:openrelay.metered.ca:80",
+          "turn:openrelay.metered.ca:443",
+          "turns:openrelay.metered.ca:443?transport=tcp"
+        ],
+        username: "openrelayproject",
+        credential: "openrelayproject"
+      }
     ]
   };
 
   const processQueuedCandidates = async () => {
     if (peerConnection.current && peerConnection.current.remoteDescription) {
+      console.log(`CallContext: Processing ${iceCandidatesQueue.current.length} queued ICE candidates`);
       while (iceCandidatesQueue.current.length > 0) {
         const candidate = iceCandidatesQueue.current.shift();
         try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log("CallContext: Added queued ICE candidate successfully");
         } catch (e) {
-          console.error("Error adding queued ice candidate", e);
+          console.error("CallContext: Error adding queued ice candidate", e);
         }
       }
     }
@@ -45,49 +68,70 @@ export const CallProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    socket.on("incomingCall", async ({ signal, from, callerInfo }) => {
-      if (activeCall || isCalling) return;
-      setIncomingCall({ signal, from, callerInfo });
-    });
+    console.log("CallContext: Registering persistent socket listeners for user:", user._id);
 
-    socket.on("callAccepted", async (signal) => {
+    const handleIncomingCall = async ({ signal, from, callerInfo }) => {
+      console.log("CallContext: incomingCall event received from:", from);
+      if (activeCallRef.current || isCallingRef.current) {
+        console.warn("CallContext: Incoming call ignored because a call is already active or in progress.");
+        return;
+      }
+      setIncomingCall({ signal, from, callerInfo });
+    };
+
+    const handleCallAccepted = async (signal) => {
+      console.log("CallContext: callAccepted event received");
       if (peerConnection.current) {
         try {
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal));
+          console.log("CallContext: Remote description set on accepted call");
           await processQueuedCandidates();
         } catch (e) {
-          console.error("Error setting remote description on accept", e);
+          console.error("CallContext: Error setting remote description on accept", e);
         }
+      } else {
+        console.warn("CallContext: callAccepted received but peerConnection.current is null");
       }
-    });
+    };
 
-    socket.on("iceCandidate", async (candidate) => {
+    const handleIceCandidate = async (candidate) => {
+      console.log("CallContext: iceCandidate event received");
       if (peerConnection.current && peerConnection.current.remoteDescription) {
         try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log("CallContext: Added incoming ICE candidate immediately");
         } catch (e) {
-          console.error("Error adding ice candidate", e);
+          console.error("CallContext: Error adding immediate ice candidate", e);
         }
       } else {
+        console.log("CallContext: Queueing incoming ICE candidate");
         iceCandidatesQueue.current.push(candidate);
       }
-    });
+    };
 
-    socket.on("endCall", () => {
+    const handleEndCall = () => {
+      console.log("CallContext: endCall event received");
       cleanupCall();
       toast("Call ended", { icon: "📞" });
-    });
+    };
+
+    socket.on("incomingCall", handleIncomingCall);
+    socket.on("callAccepted", handleCallAccepted);
+    socket.on("iceCandidate", handleIceCandidate);
+    socket.on("endCall", handleEndCall);
 
     return () => {
-      socket.off("incomingCall");
-      socket.off("callAccepted");
-      socket.off("iceCandidate");
-      socket.off("endCall");
+      console.log("CallContext: Cleaning up persistent socket listeners");
+      socket.off("incomingCall", handleIncomingCall);
+      socket.off("callAccepted", handleCallAccepted);
+      socket.off("iceCandidate", handleIceCandidate);
+      socket.off("endCall", handleEndCall);
     };
-  }, [user, activeCall, isCalling]);
+  }, [user]);
 
   const initLocalStream = async () => {
     try {
+      console.log("CallContext: Initializing local stream");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
       if (localVideoRef.current) {
@@ -103,6 +147,7 @@ export const CallProvider = ({ children }) => {
   };
 
   const createPeerConnection = (receiverId, stream) => {
+    console.log("CallContext: Creating peer connection for receiver:", receiverId);
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnection.current = pc;
 
@@ -113,10 +158,9 @@ export const CallProvider = ({ children }) => {
 
     // Handle remote tracks
     pc.ontrack = (event) => {
-      console.log("Remote track received:", event.track.kind, event.track.id);
+      console.log("CallContext: Remote track received:", event.track.kind, event.track.id);
       
       setRemoteStream((prevStream) => {
-        // Use previous stream or create a new one
         const currentStream = prevStream || new MediaStream();
         
         // Add track to stream if not already added
@@ -131,7 +175,7 @@ export const CallProvider = ({ children }) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = newStream;
           remoteVideoRef.current.play().catch(err => {
-            console.warn("Auto-play remote stream failed, waiting for user interaction:", err);
+            console.warn("CallContext: Auto-play remote stream failed, waiting for user interaction:", err);
           });
         }
         
@@ -142,21 +186,29 @@ export const CallProvider = ({ children }) => {
     // Send ICE candidates to peer
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log("CallContext: Sending ICE candidate to peer");
         socket.emit("iceCandidate", { to: receiverId, candidate: event.candidate });
       }
     };
 
     // Connection state changes
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+      console.log("CallContext: connectionState change:", pc.connectionState);
+      if (pc.connectionState === "failed") {
+        console.warn("CallContext: Peer connection failed. Cleaning up call.");
         cleanupCall();
       }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("CallContext: iceConnectionState change:", pc.iceConnectionState);
     };
 
     return pc;
   };
 
   const initiateCall = async (userToCall) => {
+    console.log("CallContext: Initiating call to user:", userToCall.username);
     setIsCalling(true);
     const stream = await initLocalStream();
     if (!stream) {
@@ -172,6 +224,7 @@ export const CallProvider = ({ children }) => {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      console.log("CallContext: Local description set (offer)");
       
       socket.emit("callUser", {
         userToCall: userToCall._id,
@@ -180,13 +233,14 @@ export const CallProvider = ({ children }) => {
         callerInfo: user
       });
     } catch (err) {
-      console.error("Error creating offer", err);
+      console.error("CallContext: Error creating offer", err);
       cleanupCall();
     }
   };
 
   const acceptCall = async () => {
     if (!incomingCall) return;
+    console.log("CallContext: Accepting call from:", incomingCall.callerInfo.username);
     
     const stream = await initLocalStream();
     if (!stream) return;
@@ -196,26 +250,30 @@ export const CallProvider = ({ children }) => {
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signal));
+      console.log("CallContext: Remote description set (offer)");
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log("CallContext: Local description set (answer)");
 
       socket.emit("answerCall", { to: incomingCall.from, signal: answer });
       setIncomingCall(null);
       await processQueuedCandidates();
     } catch (err) {
-      console.error("Error creating answer", err);
+      console.error("CallContext: Error creating answer", err);
       cleanupCall();
     }
   };
 
   const rejectCall = () => {
     if (incomingCall) {
+      console.log("CallContext: Rejecting call");
       socket.emit("endCall", { to: incomingCall.from });
       setIncomingCall(null);
     }
   };
 
   const endCall = () => {
+    console.log("CallContext: Ending call");
     if (activeCall) {
       const peerId = activeCall.user._id;
       socket.emit("endCall", { to: peerId });
@@ -228,6 +286,7 @@ export const CallProvider = ({ children }) => {
   };
 
   const cleanupCall = () => {
+    console.log("CallContext: Performing call cleanup");
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
