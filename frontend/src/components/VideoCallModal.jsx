@@ -21,17 +21,33 @@ const VideoCallModal = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
-  React.useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+  const localVideoRefCallback = React.useCallback((el) => {
+    localVideoRef.current = el;
+    if (el) {
+      if (localStream) {
+        if (el.srcObject !== localStream) {
+          el.srcObject = localStream;
+        }
+        el.play().catch((err) => console.error("Error playing local video:", err));
+      } else {
+        el.srcObject = null;
+      }
     }
-  }, [localStream, activeCall, isCalling, localVideoRef]);
+  }, [localStream, localVideoRef]);
 
-  React.useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+  const remoteVideoRefCallback = React.useCallback((el) => {
+    remoteVideoRef.current = el;
+    if (el) {
+      if (remoteStream) {
+        if (el.srcObject !== remoteStream) {
+          el.srcObject = remoteStream;
+        }
+        el.play().catch((err) => console.error("Error playing remote video:", err));
+      } else {
+        el.srcObject = null;
+      }
     }
-  }, [remoteStream, activeCall, isCalling, remoteVideoRef]);
+  }, [remoteStream, remoteVideoRef]);
 
   // No active call and no incoming call = don't render anything
   if (!incomingCall && !activeCall && !isCalling) return null;
@@ -128,7 +144,7 @@ const VideoCallModal = () => {
                </div>
              )}
              <video 
-               ref={remoteVideoRef} 
+               ref={remoteVideoRefCallback} 
                autoPlay 
                playsInline 
                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
@@ -147,7 +163,7 @@ const VideoCallModal = () => {
             boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
           }}>
              <video 
-               ref={localVideoRef} 
+               ref={localVideoRefCallback} 
                autoPlay 
                playsInline 
                muted 

@@ -90,7 +90,10 @@ export const CallProvider = ({ children }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(err => console.error("Error playing local stream:", err));
+      }
       return stream;
     } catch (err) {
       toast.error("Could not access camera/microphone");
@@ -110,9 +113,30 @@ export const CallProvider = ({ children }) => {
 
     // Handle remote tracks
     pc.ontrack = (event) => {
-      const [remoteStreamObj] = event.streams;
-      setRemoteStream(remoteStreamObj);
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStreamObj;
+      console.log("Remote track received:", event.track.kind, event.track.id);
+      
+      setRemoteStream((prevStream) => {
+        // Use previous stream or create a new one
+        const currentStream = prevStream || new MediaStream();
+        
+        // Add track to stream if not already added
+        if (!currentStream.getTracks().find(t => t.id === event.track.id)) {
+          currentStream.addTrack(event.track);
+        }
+        
+        // Create new MediaStream reference to force React state update
+        const newStream = new MediaStream(currentStream.getTracks());
+        
+        // Directly update the video element if mounted
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = newStream;
+          remoteVideoRef.current.play().catch(err => {
+            console.warn("Auto-play remote stream failed, waiting for user interaction:", err);
+          });
+        }
+        
+        return newStream;
+      });
     };
 
     // Send ICE candidates to peer
