@@ -12,7 +12,7 @@ import cors from "cors";
 const app=express();
 
 const allowedOrigins = [
-  "https://dev-connect-liard.vercel.app",
+  "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app",
   "http://localhost:5173",
   "http://127.0.0.1:5173"
 ];

@@ -15,8 +15,18 @@ const server = http.createServer(app);
 // socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: [
+      "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowEIO3: true
   },
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  transports: ["websocket", "polling"]
 });
 
 // store online users
