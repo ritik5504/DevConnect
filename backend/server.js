@@ -16,13 +16,12 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app",
       "http://localhost:5173",
-      "http://127.0.0.1:5173"
+      "https://dev-connect-liard.vercel.app",
+      "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app"
     ],
     methods: ["GET", "POST"],
-    credentials: true,
-    allowEIO3: true
+    credentials: true
   },
   pingInterval: 25000,
   pingTimeout: 60000,
