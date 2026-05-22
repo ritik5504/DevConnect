@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback } f
 import socket from "../socket/socket";
 import { useAuth } from "./AuthContext";
 import toast from "react-hot-toast";
+import API from "../api/axios";
 
 const CallContext = createContext();
 
@@ -129,15 +130,28 @@ export const CallProvider = ({ children }) => {
     }
   }, []);
 
+  // ── Fetch ICE servers from backend (best) or fall back to hardcoded ──────────
+  const fetchIceServers = useCallback(async () => {
+    try {
+      const res = await API.get("/call/ice-servers");
+      const servers = res.data.iceServers;
+      console.log("[WebRTC] ICE servers fetched from backend:", servers.length, "entries");
+      return { iceServers: servers, iceCandidatePoolSize: 10 };
+    } catch (err) {
+      console.warn("[WebRTC] Failed to fetch ICE servers from backend, using fallback:", err.message);
+      return RTC_CONFIG;
+    }
+  }, []);
+
   // ── Build RTCPeerConnection ──────────────────────────────────────────────────
-  const buildPeerConnection = useCallback((remoteUserId) => {
+  const buildPeerConnection = useCallback((remoteUserId, rtcConfig) => {
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
 
     console.log("[WebRTC] Creating RTCPeerConnection for:", remoteUserId);
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(rtcConfig || RTC_CONFIG);
     pcRef.current = pc;
     remoteUserIdRef.current = remoteUserId;
 
@@ -348,12 +362,17 @@ export const CallProvider = ({ children }) => {
     console.log("[WebRTC] initiating call to:", userToCall.username);
     setIsCalling(true);
 
-    const stream = await getLocalStream();
+    // Fetch fresh ICE servers AND local stream in parallel
+    const [rtcConfig, stream] = await Promise.all([
+      fetchIceServers(),
+      getLocalStream(),
+    ]);
+
     if (!stream) { setIsCalling(false); return; }
 
     setActiveCall({ user: userToCall, isCaller: true });
 
-    const pc = buildPeerConnection(userToCall._id);
+    const pc = buildPeerConnection(userToCall._id, rtcConfig);
 
     try {
       const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
@@ -370,7 +389,7 @@ export const CallProvider = ({ children }) => {
       console.error("[WebRTC] createOffer error:", err);
       cleanupCall();
     }
-  }, [user, getLocalStream, buildPeerConnection, cleanupCall]);
+  }, [user, fetchIceServers, getLocalStream, buildPeerConnection, cleanupCall]);
 
   // ── acceptCall (we are the callee) ──────────────────────────────────────────
   const acceptCall = useCallback(async () => {
@@ -378,13 +397,18 @@ export const CallProvider = ({ children }) => {
     if (!call) return;
     console.log("[WebRTC] accepting call from:", call.callerInfo?.username);
 
-    const stream = await getLocalStream();
+    // Fetch fresh ICE servers AND local stream in parallel
+    const [rtcConfig, stream] = await Promise.all([
+      fetchIceServers(),
+      getLocalStream(),
+    ]);
+
     if (!stream) return;
 
     setActiveCall({ user: call.callerInfo, isCaller: false });
     setIncomingCall(null);
 
-    const pc = buildPeerConnection(call.from);
+    const pc = buildPeerConnection(call.from, rtcConfig);
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(call.signal));

@@ -7,6 +7,7 @@ import userRouter from "./routes/user.routes.js";
 import postRouter from "./routes/post.routes.js";
 import messageRouter from "./routes/message.routes.js";
 import notificationRouter from "./routes/notification.routes.js";
+import callRouter from "./routes/call.routes.js";
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/user", userRouter);
 app.use("/api/post", postRouter);
 app.use("/api/message", messageRouter);
 app.use("/api/notification", notificationRouter);
+app.use("/api/call", callRouter);
 
 app.use((err, req, res, next) => {
   if (err && err.message === "Not allowed by CORS") {
