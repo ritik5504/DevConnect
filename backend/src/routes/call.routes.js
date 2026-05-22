@@ -113,10 +113,18 @@ router.get("/debug-turn", async (req, res) => {
       statusText: null,
       error: null,
       responseSample: null,
+    },
+    apiCallPost: {
+      success: false,
+      status: null,
+      statusText: null,
+      error: null,
+      responseSample: null,
     }
   };
 
   if (meteredApiKey && meteredAppName) {
+    // 1. Test GET credentials
     try {
       const url = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
       const response = await fetch(url);
@@ -132,6 +140,28 @@ router.get("/debug-turn", async (req, res) => {
       }
     } catch (err) {
       debugInfo.apiCall.error = err.message;
+    }
+
+    // 2. Test POST credential
+    try {
+      const url = `https://${meteredAppName}.metered.live/api/v1/turn/credential?secretKey=${meteredApiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiryInSeconds: 3600, label: "debug-test" })
+      });
+      debugInfo.apiCallPost.status = response.status;
+      debugInfo.apiCallPost.statusText = response.statusText;
+      if (response.ok) {
+        const credentialObj = await response.json();
+        debugInfo.apiCallPost.success = true;
+        debugInfo.apiCallPost.responseSample = credentialObj;
+      } else {
+        const text = await response.text();
+        debugInfo.apiCallPost.error = text;
+      }
+    } catch (err) {
+      debugInfo.apiCallPost.error = err.message;
     }
   }
 
