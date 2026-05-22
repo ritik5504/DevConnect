@@ -310,7 +310,15 @@ export const CallProvider = ({ children }) => {
     const onIceCandidate = async (candidate) => {
       console.log("[WebRTC] ice received");
       const pc = pcRef.current;
-      if (!pc) { console.warn("[WebRTC] no pc for ice candidate"); return; }
+      if (!pc) {
+        if (activeCallRef.current || incomingCallRef.current || isCallingRef.current) {
+          console.log("[WebRTC] queuing ice-candidate (pc not created yet)");
+          candidateQueue.current.push(candidate);
+        } else {
+          console.warn("[WebRTC] no pc for ice candidate and no active call session");
+        }
+        return;
+      }
 
       if (pc.remoteDescription && pc.remoteDescription.type) {
         try {
