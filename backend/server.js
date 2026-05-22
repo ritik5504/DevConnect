@@ -9,36 +9,28 @@ dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 
-// create http server
+// ── HTTP server ───────────────────────────────────────────────────────────────
 const server = http.createServer(app);
 
+// ── CORS origins ──────────────────────────────────────────────────────────────
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "https://dev-connect-liard.vercel.app",
-  "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app"
+  "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app",
 ];
 
-const socketCorsOptions = {
-  origin(origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    console.warn("Socket CORS blocked origin:", origin);
-    return callback(new Error("Not allowed by CORS"));
-  },
-  methods: ["GET", "POST"],
-  credentials: true,
-  transports: ["websocket", "polling"],
-};
-
-// socket.io setup
+// ── Socket.io ─────────────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: socketCorsOptions,
+  cors: {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      console.warn("[Socket] CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
   pingInterval: 25000,
   pingTimeout: 60000,
   allowEIO3: true,
@@ -46,171 +38,116 @@ const io = new Server(server, {
   maxHttpBufferSize: 1_000_000,
 });
 
-// store online users
+// ── Online user registry ──────────────────────────────────────────────────────
+// userId → socketId
 const onlineUsers = new Map();
 
-const addOnlineUser = (userId, socketId) => {
-  if (!userId || !socketId) return;
-  onlineUsers.set(userId, socketId);
-};
-
-const removeOnlineUser = (socketId) => {
-  for (const [userId, id] of onlineUsers.entries()) {
-    if (id === socketId) {
-      onlineUsers.delete(userId);
-      return userId;
-    }
+const addUser    = (userId, socketId) => { if (userId && socketId) onlineUsers.set(userId, socketId); };
+const removeUser = (socketId)         => {
+  for (const [uid, sid] of onlineUsers) {
+    if (sid === socketId) { onlineUsers.delete(uid); return uid; }
   }
   return null;
 };
-
 const getSocketId = (userId) => onlineUsers.get(userId);
 
-const sendToUser = (event, payload, userId) => {
-  const targetSocketId = getSocketId(userId);
-  if (!targetSocketId) {
-    console.warn(`Signal target offline or not joined: ${userId}`);
+/** Emit an event to a specific userId. Returns true if the user is online. */
+const emitToUser = (userId, event, payload) => {
+  const sid = getSocketId(userId);
+  if (!sid) {
+    console.warn(`[Socket] ${event} → user offline: ${userId}`);
     return false;
   }
-  io.to(targetSocketId).emit(event, payload);
+  io.to(sid).emit(event, payload);
+  console.log(`[Socket] ${event} → ${userId} (${sid})`);
   return true;
 };
 
+// ── Expose to Express routes (notifications etc.) ────────────────────────────
 app.set("socketio", io);
 app.set("onlineUsers", onlineUsers);
 
+// ── Connection handler ────────────────────────────────────────────────────────
 io.on("connection", (socket) => {
-  console.log("Socket connected:", socket.id);
+  console.log("[Socket] connected:", socket.id);
 
+  // ── Join: register userId → socketId ──────────────────────────────────────
   const handleJoin = (userId) => {
-    if (!userId) {
-      console.warn("join event received without userId from socket:", socket.id);
-      return;
-    }
-    addOnlineUser(userId, socket.id);
-    socket.join(userId);
-    console.log("User joined:", userId, socket.id);
+    if (!userId) return;
+    addUser(userId, socket.id);
+    socket.join(userId);  // join a room named by userId so io.to(userId) also works
+    console.log("[Socket] joined:", userId, "→", socket.id);
   };
-
-  socket.on("join", handleJoin);
+  socket.on("join",      handleJoin);
   socket.on("join-call", handleJoin);
 
-  // send message
-  // Frontend sends { senderId, receiverId, text }
+  // ── Chat: send message ─────────────────────────────────────────────────────
   socket.on("sendMessage", async ({ senderId, receiverId, text }) => {
     try {
-      // Save message to DB
-      const newMessage = await Message.create({
-        sender: senderId,
-        receiver: receiverId,
-        text,
-      });
-
-      // Emit to receiver (if online)
-      const receiverSocketId = getSocketId(receiverId);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("receiveMessage", newMessage);
-      }
-
-      // Echo back to sender so their message appears without a page refresh
-      const senderSocketId = getSocketId(senderId);
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("receiveMessage", newMessage);
-      }
-    } catch (error) {
-      console.error("MESSAGE ERROR:", error);
+      const msg = await Message.create({ sender: senderId, receiver: receiverId, text });
+      emitToUser(receiverId, "receiveMessage", msg);
+      emitToUser(senderId,   "receiveMessage", msg);
+    } catch (err) {
+      console.error("[Socket] sendMessage error:", err.message);
     }
   });
 
-  // delete message
-  // Frontend sends { messageId, senderId, receiverId }
+  // ── Chat: delete message ───────────────────────────────────────────────────
   socket.on("deleteMessage", ({ messageId, senderId, receiverId }) => {
-    const receiverSocketId = getSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("messageDeleted", { messageId });
-    }
-    const senderSocketId = getSocketId(senderId);
-    if (senderSocketId) {
-      io.to(senderSocketId).emit("messageDeleted", { messageId });
-    }
+    emitToUser(receiverId, "messageDeleted", { messageId });
+    emitToUser(senderId,   "messageDeleted", { messageId });
   });
 
-  // --- WebRTC Video Call Signaling ---
+  // ══════════════════════════════════════════════════════════════════════════
+  //  WebRTC signaling — each message forwarded ONCE using emitToUser
+  // ══════════════════════════════════════════════════════════════════════════
 
-  const forwardOffer = ({ userToCall, signalData, from, callerInfo }) => {
-    console.log("Offer received from:", from, "to:", userToCall);
-    const payload = { signal: signalData, from, callerInfo };
-    const success = sendToUser("incomingCall", payload, userToCall);
-    if (success) {
-      io.to(getSocketId(userToCall)).emit("incoming-call", payload);
-      console.log("Incoming offer forwarded to:", userToCall);
-    }
-  };
+  // Caller → Server → Callee: send offer
+  socket.on("callUser", ({ userToCall, signalData, from, callerInfo }) => {
+    console.log("[WebRTC] offer:", from, "→", userToCall);
+    emitToUser(userToCall, "incomingCall", { signal: signalData, from, callerInfo });
+  });
 
-  socket.on("callUser", forwardOffer);
-  socket.on("call-user", forwardOffer);
+  // Callee → Server → Caller: send answer
+  socket.on("answerCall", ({ to, signal }) => {
+    console.log("[WebRTC] answer:", socket.id, "→", to);
+    emitToUser(to, "callAccepted", signal);
+  });
 
-  const forwardAnswer = ({ to, signal }) => {
-    console.log("Answer received from:", socket.id, "to:", to);
-    const success = sendToUser("callAccepted", signal, to);
-    if (success) {
-      io.to(getSocketId(to)).emit("answer-call", signal);
-      console.log("Answer forwarded to caller:", to);
-    }
-  };
+  // Either side → Server → Other side: ICE candidate
+  socket.on("iceCandidate", ({ to, candidate }) => {
+    console.log("[WebRTC] ice-candidate:", socket.id, "→", to);
+    emitToUser(to, "iceCandidate", candidate);
+  });
 
-  socket.on("answerCall", forwardAnswer);
-  socket.on("answer-call", forwardAnswer);
+  // Either side → Server → Other side: end call
+  socket.on("endCall", ({ to }) => {
+    console.log("[WebRTC] endCall:", socket.id, "→", to);
+    emitToUser(to, "endCall", null);
+  });
 
-  const forwardIceCandidate = ({ to, candidate }) => {
-    console.log("ICE candidate received from:", socket.id, "to:", to);
-    const success = sendToUser("iceCandidate", candidate, to);
-    if (success) {
-      io.to(getSocketId(to)).emit("ice-candidate", candidate);
-      console.log("ICE candidate forwarded to:", to);
-    }
-  };
-
-  socket.on("iceCandidate", forwardIceCandidate);
-  socket.on("ice-candidate", forwardIceCandidate);
-
-  const forwardEndCall = ({ to }) => {
-    console.log("Call ended request from:", socket.id, "to:", to);
-    const success = sendToUser("endCall", null, to);
-    if (success) {
-      io.to(getSocketId(to)).emit("call-ended");
-      console.log("Call ended forwarded to:", to);
-    }
-  };
-
-  socket.on("endCall", forwardEndCall);
-  socket.on("call-ended", forwardEndCall);
-
-  // disconnect
+  // ── Disconnect ────────────────────────────────────────────────────────────
   socket.on("disconnect", (reason) => {
-    const userId = removeOnlineUser(socket.id);
-    console.log("Socket disconnected:", socket.id, "reason:", reason, "userId:", userId);
+    const uid = removeUser(socket.id);
+    console.log("[Socket] disconnected:", socket.id, "reason:", reason, "userId:", uid);
   });
 });
 
+// ── Start server ──────────────────────────────────────────────────────────────
 const startServer = async () => {
   try {
     await connectDB();
-
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-
-    server.on("error", (error) => {
-      if (error.code === "EADDRINUSE") {
-        console.error(`Port ${PORT} is already in use. Set a different PORT in .env or stop the process using it.`);
+    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(`Port ${PORT} already in use`);
       } else {
-        console.error("Server error:", error);
+        console.error("Server error:", err);
       }
       process.exit(1);
     });
-  } catch (error) {
-    console.error("Failed to start server:", error.message);
+  } catch (err) {
+    console.error("Failed to start server:", err.message);
     process.exit(1);
   }
 };
