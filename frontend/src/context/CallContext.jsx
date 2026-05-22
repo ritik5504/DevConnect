@@ -20,6 +20,8 @@ export const CallProvider = ({ children }) => {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const iceCandidatesQueue = useRef([]);
+  const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
 
   // Refs for tracking active call status in persistent socket listeners
   const activeCallRef = useRef(activeCall);
@@ -134,6 +136,7 @@ export const CallProvider = ({ children }) => {
       console.log("CallContext: Initializing local stream");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setLocalStream(stream);
+      localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(err => console.error("Error playing local stream:", err));
@@ -160,27 +163,42 @@ export const CallProvider = ({ children }) => {
     pc.ontrack = (event) => {
       console.log("CallContext: Remote track received:", event.track.kind, event.track.id);
       
-      setRemoteStream((prevStream) => {
-        const currentStream = prevStream || new MediaStream();
-        
-        // Add track to stream if not already added
-        if (!currentStream.getTracks().find(t => t.id === event.track.id)) {
-          currentStream.addTrack(event.track);
+      // Get the stream from the event, or fallback to our persistent stream ref
+      let stream = event.streams[0];
+      
+      if (!stream) {
+        console.log("CallContext: No event.streams[0], using/creating remoteStreamRef");
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
         }
-        
-        // Create new MediaStream reference to force React state update
-        const newStream = new MediaStream(currentStream.getTracks());
-        
-        // Directly update the video element if mounted
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = newStream;
-          remoteVideoRef.current.play().catch(err => {
-            console.warn("CallContext: Auto-play remote stream failed, waiting for user interaction:", err);
-          });
+        if (!remoteStreamRef.current.getTracks().find(t => t.id === event.track.id)) {
+          remoteStreamRef.current.addTrack(event.track);
         }
-        
-        return newStream;
+        stream = remoteStreamRef.current;
+      } else {
+        remoteStreamRef.current = stream;
+      }
+      
+      // Set the state once to trigger UI updates, but avoid changing state if we already have the same stream reference
+      setRemoteStream((prev) => {
+        if (prev !== stream) {
+          return stream;
+        }
+        return prev;
       });
+      
+      // Directly assign to the video element if mounted and not already set
+      if (remoteVideoRef.current) {
+        if (remoteVideoRef.current.srcObject !== stream) {
+          console.log("CallContext: Setting remoteVideoRef.current.srcObject to remote stream");
+          remoteVideoRef.current.srcObject = stream;
+        }
+        
+        // Always try to play in case it was paused or not playing
+        remoteVideoRef.current.play().catch(err => {
+          console.warn("CallContext: Auto-play remote stream failed:", err);
+        });
+      }
     };
 
     // Send ICE candidates to peer
@@ -287,14 +305,55 @@ export const CallProvider = ({ children }) => {
 
   const cleanupCall = () => {
     console.log("CallContext: Performing call cleanup");
+    
+    // Close peer connection
     if (peerConnection.current) {
+      // Remove event handlers to prevent further callbacks
+      peerConnection.current.onicecandidate = null;
+      peerConnection.current.ontrack = null;
+      peerConnection.current.onconnectionstatechange = null;
+      peerConnection.current.oniceconnectionstatechange = null;
+      
       peerConnection.current.close();
       peerConnection.current = null;
     }
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
+    
+    // Stop all local tracks using the ref to avoid stale closure issues
+    if (localStreamRef.current) {
+      console.log("CallContext: Stopping local stream tracks from ref");
+      localStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        console.log(`CallContext: Stopped track: ${track.kind}`);
+      });
+      localStreamRef.current = null;
     }
+    
+    // Fallback: also stop tracks from localStream state if available
+    if (localStream) {
+      console.log("CallContext: Stopping local stream tracks from state");
+      localStream.getTracks().forEach((track) => track.stop());
+    }
+
+    if (remoteStreamRef.current) {
+      console.log("CallContext: Stopping remote stream tracks from ref");
+      remoteStreamRef.current.getTracks().forEach((track) => track.stop());
+      remoteStreamRef.current = null;
+    }
+    
+    if (remoteStream) {
+      console.log("CallContext: Stopping remote stream tracks from state");
+      remoteStream.getTracks().forEach((track) => track.stop());
+    }
+
+    // Set srcObject to null on video elements to release camera/mic hold and black out video
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    setLocalStream(null);
     setRemoteStream(null);
     setActiveCall(null);
     setIncomingCall(null);

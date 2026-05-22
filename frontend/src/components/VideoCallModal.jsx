@@ -21,11 +21,13 @@ const VideoCallModal = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
-  const localVideoRefCallback = React.useCallback((el) => {
-    localVideoRef.current = el;
+  // Bind local stream
+  React.useEffect(() => {
+    const el = localVideoRef.current;
     if (el) {
       if (localStream) {
         if (el.srcObject !== localStream) {
+          console.log("VideoCallModal: Binding localStream to video element");
           el.srcObject = localStream;
         }
         el.play().catch((err) => console.error("Error playing local video:", err));
@@ -35,11 +37,13 @@ const VideoCallModal = () => {
     }
   }, [localStream, localVideoRef]);
 
-  const remoteVideoRefCallback = React.useCallback((el) => {
-    remoteVideoRef.current = el;
+  // Bind remote stream
+  React.useEffect(() => {
+    const el = remoteVideoRef.current;
     if (el) {
       if (remoteStream) {
         if (el.srcObject !== remoteStream) {
+          console.log("VideoCallModal: Binding remoteStream to video element");
           el.srcObject = remoteStream;
         }
         el.play().catch((err) => console.error("Error playing remote video:", err));
@@ -144,7 +148,7 @@ const VideoCallModal = () => {
                </div>
              )}
              <video 
-               ref={remoteVideoRefCallback} 
+               ref={remoteVideoRef} 
                autoPlay 
                playsInline 
                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
@@ -163,7 +167,7 @@ const VideoCallModal = () => {
             boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
           }}>
              <video 
-               ref={localVideoRefCallback} 
+               ref={localVideoRef} 
                autoPlay 
                playsInline 
                muted 
