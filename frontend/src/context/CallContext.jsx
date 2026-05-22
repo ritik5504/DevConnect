@@ -6,10 +6,31 @@ import toast from "react-hot-toast";
 const CallContext = createContext();
 
 // ─── ICE / TURN config ────────────────────────────────────────────────────────
+// Multiple TURN servers so if one is down, others relay the traffic.
+// freeturn.net is a known reliable free public TURN relay.
 const RTC_CONFIG = {
   iceServers: [
+    // STUN – discover public IPs
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.relay.metered.ca:80" },
+
+    // TURN #1 – freeturn.net (reliable free public relay)
+    {
+      urls: "turn:freeturn.net:3478",
+      username: "free",
+      credential: "free",
+    },
+    {
+      urls: "turns:freeturn.net:5349",
+      username: "free",
+      credential: "free",
+    },
+
+    // TURN #2 – openrelay.metered.ca (backup)
     {
       urls: [
         "turn:openrelay.metered.ca:80",
@@ -19,7 +40,15 @@ const RTC_CONFIG = {
       username: "openrelayproject",
       credential: "openrelayproject",
     },
+
+    // TURN #3 – numb.viagenie.ca (additional backup)
+    {
+      urls: "turn:numb.viagenie.ca",
+      username: "webrtc@live.com",
+      credential: "muazkh",
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export const CallProvider = ({ children }) => {
@@ -150,8 +179,17 @@ export const CallProvider = ({ children }) => {
     // ── onicecandidate: send our ICE candidates to the peer ─────────────────
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("[WebRTC] ice sent");
+        console.log("[WebRTC] ice sent:", event.candidate.type, event.candidate.protocol);
         socket.emit("iceCandidate", { to: remoteUserId, candidate: event.candidate });
+      } else {
+        console.log("[WebRTC] ICE gathering complete");
+      }
+    };
+
+    pc.onicecandidateerror = (event) => {
+      // errorCode 701 = STUN/TURN unreachable (normal for blocked servers, not fatal)
+      if (event.errorCode !== 701) {
+        console.warn("[WebRTC] ICE candidate error:", event.errorCode, event.errorText, event.url);
       }
     };
 
@@ -162,8 +200,12 @@ export const CallProvider = ({ children }) => {
     pc.oniceconnectionstatechange = () => {
       console.log("[WebRTC] iceConnectionState:", pc.iceConnectionState);
       if (pc.iceConnectionState === "failed") {
-        console.warn("[WebRTC] ICE failed, restarting...");
+        console.warn("[WebRTC] ICE failed — attempting ICE restart...");
+        // restartIce() triggers a new offer/answer with fresh ICE candidates
         pc.restartIce();
+      }
+      if (pc.iceConnectionState === "disconnected") {
+        console.warn("[WebRTC] ICE disconnected — may recover automatically");
       }
     };
 
