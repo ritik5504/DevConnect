@@ -26,20 +26,23 @@ router.get("/ice-servers", protect, async (req, res) => {
     const meteredAppName = process.env.METERED_APP_NAME;
 
     if (meteredApiKey && meteredAppName) {
+      console.log(`[ICE] Metered.ca environment variables found. Attempting to fetch credentials for app: ${meteredAppName}`);
       try {
         const url = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
         const response = await fetch(url);
         if (response.ok) {
           const credentials = await response.json();
           iceServers.push(...credentials);
-          console.log("[ICE] Fetched fresh Metered.ca TURN credentials");
+          console.log("[ICE] Successfully fetched fresh Metered.ca TURN credentials");
           return res.json({ iceServers });
         } else {
-          console.warn("[ICE] Metered.ca fetch failed, status:", response.status);
+          console.warn("[ICE] Metered.ca credentials fetch API returned non-OK status:", response.status);
         }
       } catch (err) {
-        console.error("[ICE] Metered.ca fetch error:", err.message);
+        console.error("[ICE] Metered.ca credentials fetch encountered an error:", err.message);
       }
+    } else {
+      console.log("[ICE] Metered.ca environment variables (METERED_API_KEY and/or METERED_APP_NAME) are missing. Falling back to public TURN servers.");
     }
 
     // ── Fallback: hardcoded public TURN servers ──────────────────────────

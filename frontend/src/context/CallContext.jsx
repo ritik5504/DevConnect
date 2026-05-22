@@ -135,7 +135,7 @@ export const CallProvider = ({ children }) => {
     try {
       const res = await API.get("/call/ice-servers");
       const servers = res.data.iceServers;
-      console.log("[WebRTC] ICE servers fetched from backend:", servers.length, "entries");
+      console.log("[WebRTC] ICE servers fetched from backend:", servers.length, "entries", servers);
       return { iceServers: servers, iceCandidatePoolSize: 10 };
     } catch (err) {
       console.warn("[WebRTC] Failed to fetch ICE servers from backend, using fallback:", err.message);
