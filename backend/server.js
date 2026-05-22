@@ -12,36 +12,88 @@ const PORT = process.env.PORT || 5000;
 // create http server
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://dev-connect-liard.vercel.app",
+  "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app"
+];
+
+const socketCorsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn("Socket CORS blocked origin:", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST"],
+  credentials: true,
+  transports: ["websocket", "polling"],
+};
+
 // socket.io setup
 const io = new Server(server, {
-  cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://dev-connect-liard.vercel.app",
-      "https://dev-connect-88pk3dcy5-ritiks-projects-b980f58e.vercel.app"
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
-  },
+  cors: socketCorsOptions,
   pingInterval: 25000,
   pingTimeout: 60000,
-  transports: ["websocket", "polling"]
+  allowEIO3: true,
+  transports: ["websocket", "polling"],
+  maxHttpBufferSize: 1_000_000,
 });
 
 // store online users
 const onlineUsers = new Map();
 
+const addOnlineUser = (userId, socketId) => {
+  if (!userId || !socketId) return;
+  onlineUsers.set(userId, socketId);
+};
+
+const removeOnlineUser = (socketId) => {
+  for (const [userId, id] of onlineUsers.entries()) {
+    if (id === socketId) {
+      onlineUsers.delete(userId);
+      return userId;
+    }
+  }
+  return null;
+};
+
+const getSocketId = (userId) => onlineUsers.get(userId);
+
+const sendToUser = (event, payload, userId) => {
+  const targetSocketId = getSocketId(userId);
+  if (!targetSocketId) {
+    console.warn(`Signal target offline or not joined: ${userId}`);
+    return false;
+  }
+  io.to(targetSocketId).emit(event, payload);
+  return true;
+};
+
 app.set("socketio", io);
 app.set("onlineUsers", onlineUsers);
 
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  console.log("Socket connected:", socket.id);
 
-  // join event
-  socket.on("join", (userId) => {
-    onlineUsers.set(userId, socket.id);
-    console.log("Online users:", onlineUsers);
-  });
+  const handleJoin = (userId) => {
+    if (!userId) {
+      console.warn("join event received without userId from socket:", socket.id);
+      return;
+    }
+    addOnlineUser(userId, socket.id);
+    socket.join(userId);
+    console.log("User joined:", userId, socket.id);
+  };
+
+  socket.on("join", handleJoin);
+  socket.on("join-call", handleJoin);
 
   // send message
   // Frontend sends { senderId, receiverId, text }
@@ -55,13 +107,13 @@ io.on("connection", (socket) => {
       });
 
       // Emit to receiver (if online)
-      const receiverSocketId = onlineUsers.get(receiverId);
+      const receiverSocketId = getSocketId(receiverId);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("receiveMessage", newMessage);
       }
 
       // Echo back to sender so their message appears without a page refresh
-      const senderSocketId = onlineUsers.get(senderId);
+      const senderSocketId = getSocketId(senderId);
       if (senderSocketId) {
         io.to(senderSocketId).emit("receiveMessage", newMessage);
       }
@@ -73,13 +125,11 @@ io.on("connection", (socket) => {
   // delete message
   // Frontend sends { messageId, senderId, receiverId }
   socket.on("deleteMessage", ({ messageId, senderId, receiverId }) => {
-    // Notify receiver their copy should be removed
-    const receiverSocketId = onlineUsers.get(receiverId);
+    const receiverSocketId = getSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("messageDeleted", { messageId });
     }
-    // Confirm deletion to sender
-    const senderSocketId = onlineUsers.get(senderId);
+    const senderSocketId = getSocketId(senderId);
     if (senderSocketId) {
       io.to(senderSocketId).emit("messageDeleted", { messageId });
     }
@@ -87,44 +137,59 @@ io.on("connection", (socket) => {
 
   // --- WebRTC Video Call Signaling ---
 
-  socket.on("callUser", ({ userToCall, signalData, from, callerInfo }) => {
-    const receiverSocketId = onlineUsers.get(userToCall);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("incomingCall", { signal: signalData, from, callerInfo });
+  const forwardOffer = ({ userToCall, signalData, from, callerInfo }) => {
+    console.log("Offer received from:", from, "to:", userToCall);
+    const payload = { signal: signalData, from, callerInfo };
+    const success = sendToUser("incomingCall", payload, userToCall);
+    if (success) {
+      io.to(getSocketId(userToCall)).emit("incoming-call", payload);
+      console.log("Incoming offer forwarded to:", userToCall);
     }
-  });
+  };
 
-  socket.on("answerCall", ({ to, signal }) => {
-    const callerSocketId = onlineUsers.get(to);
-    if (callerSocketId) {
-      io.to(callerSocketId).emit("callAccepted", signal);
-    }
-  });
+  socket.on("callUser", forwardOffer);
+  socket.on("call-user", forwardOffer);
 
-  socket.on("iceCandidate", ({ to, candidate }) => {
-    const receiverSocketId = onlineUsers.get(to);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("iceCandidate", candidate);
+  const forwardAnswer = ({ to, signal }) => {
+    console.log("Answer received from:", socket.id, "to:", to);
+    const success = sendToUser("callAccepted", signal, to);
+    if (success) {
+      io.to(getSocketId(to)).emit("answer-call", signal);
+      console.log("Answer forwarded to caller:", to);
     }
-  });
+  };
 
-  socket.on("endCall", ({ to }) => {
-    const receiverSocketId = onlineUsers.get(to);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("endCall");
+  socket.on("answerCall", forwardAnswer);
+  socket.on("answer-call", forwardAnswer);
+
+  const forwardIceCandidate = ({ to, candidate }) => {
+    console.log("ICE candidate received from:", socket.id, "to:", to);
+    const success = sendToUser("iceCandidate", candidate, to);
+    if (success) {
+      io.to(getSocketId(to)).emit("ice-candidate", candidate);
+      console.log("ICE candidate forwarded to:", to);
     }
-  });
+  };
+
+  socket.on("iceCandidate", forwardIceCandidate);
+  socket.on("ice-candidate", forwardIceCandidate);
+
+  const forwardEndCall = ({ to }) => {
+    console.log("Call ended request from:", socket.id, "to:", to);
+    const success = sendToUser("endCall", null, to);
+    if (success) {
+      io.to(getSocketId(to)).emit("call-ended");
+      console.log("Call ended forwarded to:", to);
+    }
+  };
+
+  socket.on("endCall", forwardEndCall);
+  socket.on("call-ended", forwardEndCall);
 
   // disconnect
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-
-    for (let [userId, socketId] of onlineUsers) {
-      if (socketId === socket.id) {
-        onlineUsers.delete(userId);
-        break;
-      }
-    }
+  socket.on("disconnect", (reason) => {
+    const userId = removeOnlineUser(socket.id);
+    console.log("Socket disconnected:", socket.id, "reason:", reason, "userId:", userId);
   });
 });
 
