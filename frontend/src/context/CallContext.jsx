@@ -59,7 +59,7 @@ export const CallProvider = ({ children }) => {
         const candidate = iceCandidatesQueue.current.shift();
         try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
-          console.log("CallContext: Added queued ICE candidate successfully");
+          console.log("ice received");
         } catch (e) {
           console.error("CallContext: Error adding queued ice candidate", e);
         }
@@ -72,8 +72,16 @@ export const CallProvider = ({ children }) => {
 
     console.log("CallContext: Registering persistent socket listeners for user:", user._id);
 
+    if (socket.connected) {
+      console.log("socket connected");
+    }
+
+    const handleConnect = () => {
+      console.log("socket connected");
+    };
+
     const handleIncomingCall = async ({ signal, from, callerInfo }) => {
-      console.log("CallContext: incomingCall event received from:", from);
+      console.log("offer received");
       if (activeCallRef.current || isCallingRef.current) {
         console.warn("CallContext: Incoming call ignored because a call is already active or in progress.");
         return;
@@ -82,7 +90,7 @@ export const CallProvider = ({ children }) => {
     };
 
     const handleCallAccepted = async (signal) => {
-      console.log("CallContext: callAccepted event received");
+      console.log("answer received");
       if (peerConnection.current) {
         try {
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal));
@@ -97,39 +105,45 @@ export const CallProvider = ({ children }) => {
     };
 
     const handleIceCandidate = async (candidate) => {
-      console.log("CallContext: iceCandidate event received");
+      console.log("ice received");
       if (peerConnection.current && peerConnection.current.remoteDescription) {
         try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
-          console.log("CallContext: Added incoming ICE candidate immediately");
         } catch (e) {
           console.error("CallContext: Error adding immediate ice candidate", e);
         }
       } else {
-        console.log("CallContext: Queueing incoming ICE candidate");
         iceCandidatesQueue.current.push(candidate);
       }
     };
 
     const handleEndCall = () => {
-      console.log("CallContext: endCall event received");
+      console.log("call ended");
       cleanupCall();
       toast("Call ended", { icon: "📞" });
     };
 
+    socket.on("connect", handleConnect);
     socket.on("incomingCall", handleIncomingCall);
     socket.on("callAccepted", handleCallAccepted);
     socket.on("iceCandidate", handleIceCandidate);
     socket.on("endCall", handleEndCall);
 
     return () => {
-      console.log("CallContext: Cleaning up persistent socket listeners");
+      socket.off("connect", handleConnect);
       socket.off("incomingCall", handleIncomingCall);
       socket.off("callAccepted", handleCallAccepted);
       socket.off("iceCandidate", handleIceCandidate);
       socket.off("endCall", handleEndCall);
     };
   }, [user]);
+
+  // FIX 7: Component unmount cleanup
+  useEffect(() => {
+    return () => {
+      cleanupCall();
+    };
+  }, []);
 
   const initLocalStream = async () => {
     try {
@@ -161,13 +175,11 @@ export const CallProvider = ({ children }) => {
 
     // Handle remote tracks
     pc.ontrack = (event) => {
-      console.log("CallContext: Remote track received:", event.track.kind, event.track.id);
+      console.log("remote stream received");
       
-      // Get the stream from the event, or fallback to our persistent stream ref
       let stream = event.streams[0];
       
       if (!stream) {
-        console.log("CallContext: No event.streams[0], using/creating remoteStreamRef");
         if (!remoteStreamRef.current) {
           remoteStreamRef.current = new MediaStream();
         }
@@ -179,7 +191,6 @@ export const CallProvider = ({ children }) => {
         remoteStreamRef.current = stream;
       }
       
-      // Set the state once to trigger UI updates, but avoid changing state if we already have the same stream reference
       setRemoteStream((prev) => {
         if (prev !== stream) {
           return stream;
@@ -187,14 +198,11 @@ export const CallProvider = ({ children }) => {
         return prev;
       });
       
-      // Directly assign to the video element if mounted and not already set
       if (remoteVideoRef.current) {
         if (remoteVideoRef.current.srcObject !== stream) {
-          console.log("CallContext: Setting remoteVideoRef.current.srcObject to remote stream");
           remoteVideoRef.current.srcObject = stream;
         }
         
-        // Always try to play in case it was paused or not playing
         remoteVideoRef.current.play().catch(err => {
           console.warn("CallContext: Auto-play remote stream failed:", err);
         });
@@ -204,7 +212,7 @@ export const CallProvider = ({ children }) => {
     // Send ICE candidates to peer
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("CallContext: Sending ICE candidate to peer");
+        console.log("ice sent");
         socket.emit("iceCandidate", { to: receiverId, candidate: event.candidate });
       }
     };
@@ -238,11 +246,10 @@ export const CallProvider = ({ children }) => {
     
     const pc = createPeerConnection(userToCall._id, stream);
     
-    // Create offer
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      console.log("CallContext: Local description set (offer)");
+      console.log("offer sent");
       
       socket.emit("callUser", {
         userToCall: userToCall._id,
@@ -268,10 +275,9 @@ export const CallProvider = ({ children }) => {
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signal));
-      console.log("CallContext: Remote description set (offer)");
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log("CallContext: Local description set (answer)");
+      console.log("answer sent");
 
       socket.emit("answerCall", { to: incomingCall.from, signal: answer });
       setIncomingCall(null);
@@ -284,14 +290,14 @@ export const CallProvider = ({ children }) => {
 
   const rejectCall = () => {
     if (incomingCall) {
-      console.log("CallContext: Rejecting call");
+      console.log("call ended");
       socket.emit("endCall", { to: incomingCall.from });
       setIncomingCall(null);
     }
   };
 
   const endCall = () => {
-    console.log("CallContext: Ending call");
+    console.log("call ended");
     if (activeCall) {
       const peerId = activeCall.user._id;
       socket.emit("endCall", { to: peerId });
@@ -304,11 +310,10 @@ export const CallProvider = ({ children }) => {
   };
 
   const cleanupCall = () => {
-    console.log("CallContext: Performing call cleanup");
+    console.log("cleanup executed");
     
     // Close peer connection
     if (peerConnection.current) {
-      // Remove event handlers to prevent further callbacks
       peerConnection.current.onicecandidate = null;
       peerConnection.current.ontrack = null;
       peerConnection.current.onconnectionstatechange = null;
@@ -320,28 +325,23 @@ export const CallProvider = ({ children }) => {
     
     // Stop all local tracks using the ref to avoid stale closure issues
     if (localStreamRef.current) {
-      console.log("CallContext: Stopping local stream tracks from ref");
       localStreamRef.current.getTracks().forEach((track) => {
         track.stop();
-        console.log(`CallContext: Stopped track: ${track.kind}`);
       });
       localStreamRef.current = null;
     }
     
     // Fallback: also stop tracks from localStream state if available
     if (localStream) {
-      console.log("CallContext: Stopping local stream tracks from state");
       localStream.getTracks().forEach((track) => track.stop());
     }
 
     if (remoteStreamRef.current) {
-      console.log("CallContext: Stopping remote stream tracks from ref");
       remoteStreamRef.current.getTracks().forEach((track) => track.stop());
       remoteStreamRef.current = null;
     }
     
     if (remoteStream) {
-      console.log("CallContext: Stopping remote stream tracks from state");
       remoteStream.getTracks().forEach((track) => track.stop());
     }
 
