@@ -85,4 +85,54 @@ router.get("/ice-servers", protect, async (req, res) => {
   }
 });
 
+// GET /api/call/debug-turn
+// A public helper route to check environmental configuration and test Metered.ca API connectivity.
+router.get("/debug-turn", async (req, res) => {
+  const meteredApiKey = process.env.METERED_API_KEY;
+  const meteredAppName = process.env.METERED_APP_NAME;
+
+  const debugInfo = {
+    METERED_APP_NAME: {
+      exists: !!meteredAppName,
+      value: meteredAppName || null,
+      hasDotMeteredLive: meteredAppName ? meteredAppName.includes(".metered.live") : false,
+    },
+    METERED_API_KEY: {
+      exists: !!meteredApiKey,
+      length: meteredApiKey ? meteredApiKey.length : 0,
+      masked: meteredApiKey ? `${meteredApiKey.slice(0, 3)}...${meteredApiKey.slice(-3)}` : null,
+      looksLikePlaceholder: meteredApiKey ? (meteredApiKey.includes("<") || meteredApiKey.includes("paste")) : false,
+    },
+    apiCall: {
+      success: false,
+      status: null,
+      statusText: null,
+      error: null,
+      responseSample: null,
+    }
+  };
+
+  if (meteredApiKey && meteredAppName) {
+    try {
+      const url = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
+      const response = await fetch(url);
+      debugInfo.apiCall.status = response.status;
+      debugInfo.apiCall.statusText = response.statusText;
+      if (response.ok) {
+        const credentials = await response.json();
+        debugInfo.apiCall.success = true;
+        debugInfo.apiCall.responseSample = credentials;
+      } else {
+        const text = await response.text();
+        debugInfo.apiCall.error = text;
+      }
+    } catch (err) {
+      debugInfo.apiCall.error = err.message;
+    }
+  }
+
+  return res.json(debugInfo);
+});
+
 export default router;
+
