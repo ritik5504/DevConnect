@@ -22,11 +22,11 @@ router.get("/ice-servers", protect, async (req, res) => {
     ];
 
     // ── Metered.ca dynamic credentials (most reliable, free account needed) ─
-    const meteredApiKey  = process.env.METERED_API_KEY;
-    const meteredAppName = process.env.METERED_APP_NAME;
+    const meteredApiKey  = process.env.METERED_API_KEY?.trim();
+    const meteredAppName = process.env.METERED_APP_NAME?.trim();
 
     if (meteredApiKey && meteredAppName) {
-      console.log(`[ICE] Metered.ca environment variables found. Attempting to fetch credentials for app: ${meteredAppName}`);
+      console.log(`[ICE] Metered.ca environment variables found (trimmed). Attempting to fetch credentials for app: ${meteredAppName}`);
       try {
         const url = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
         const response = await fetch(url);
@@ -88,20 +88,24 @@ router.get("/ice-servers", protect, async (req, res) => {
 // GET /api/call/debug-turn
 // A public helper route to check environmental configuration and test Metered.ca API connectivity.
 router.get("/debug-turn", async (req, res) => {
-  const meteredApiKey = process.env.METERED_API_KEY;
-  const meteredAppName = process.env.METERED_APP_NAME;
+  const rawApiKey = process.env.METERED_API_KEY || "";
+  const rawAppName = process.env.METERED_APP_NAME || "";
+  const meteredApiKey = rawApiKey.trim();
+  const meteredAppName = rawAppName.trim();
 
   const debugInfo = {
     METERED_APP_NAME: {
-      exists: !!meteredAppName,
-      value: meteredAppName || null,
-      hasDotMeteredLive: meteredAppName ? meteredAppName.includes(".metered.live") : false,
+      exists: !!rawAppName,
+      value: rawAppName || null,
+      hasDotMeteredLive: rawAppName.includes(".metered.live"),
+      hasWhitespace: rawAppName !== meteredAppName,
     },
     METERED_API_KEY: {
-      exists: !!meteredApiKey,
-      length: meteredApiKey ? meteredApiKey.length : 0,
-      masked: meteredApiKey ? `${meteredApiKey.slice(0, 3)}...${meteredApiKey.slice(-3)}` : null,
-      looksLikePlaceholder: meteredApiKey ? (meteredApiKey.includes("<") || meteredApiKey.includes("paste")) : false,
+      exists: !!rawApiKey,
+      length: rawApiKey.length,
+      masked: rawApiKey ? `${rawApiKey.slice(0, 3)}...${rawApiKey.slice(-3)}` : null,
+      looksLikePlaceholder: rawApiKey.includes("<") || rawApiKey.includes("paste"),
+      hasWhitespace: rawApiKey !== meteredApiKey,
     },
     apiCall: {
       success: false,
